@@ -4,7 +4,7 @@ Code to implement LCW-cDFT for solvation
 
 ## About the code
 
-This is a simple python program implementing Lum--Chandler--Weeks-style classical Density functional theory (LCW-cDFT) for solvation of non-polar spherical solutes.
+This is a simple python program implementing Lum-Chandler-Weeks-style classical Density Functional Theory (LCW-cDFT) for solvation of non-polar spherical solutes.
 
 ## Citation
 
@@ -15,12 +15,13 @@ Please find the associated paper with the code:
 ## Installation
 
 1. Clone the repo
+
    ```sh
    git clone https://github.com/annatbui/LCW-cDFT.git
    ```
+
 2. Install the necessary python packages 
 
-Requirements:
 - Python >= 3.7
 - Scipy >= 1.6.0
 - NumPy
