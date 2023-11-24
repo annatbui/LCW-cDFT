@@ -1,7 +1,7 @@
 # FLUID PROPERTIES
 
 model                       = SPC/E
-bulk_density [AA-3]	        = 0.03323521
+bulk_density [AA-3]         = 0.03323521
 dcf_kspace [file_path]	    = ../parameters/dcf_ck_spce_rho_u.txt
 temperature [K]             = 300
 chemical_potential [kBT]    = 1e-3
@@ -15,15 +15,15 @@ interfacial_thickness [AA]  = 1.54
 
 # SOLUTE PROPERTIES
 
-type 		                = hard-sphere
+type                        = hard-sphere
 HS_radius [AA]              = 2
 LJ_epsilon [kcal mol-1]     = 0 
 LJ_sigma  [AA]              = 0
 
 # COARSE-GRAINING PARAMETERS
 
-a [kJ cm3 mol-2]            = 170
-lambda [angstrom]           = 0.8
+a [kJ cm3 mol-2]            = 200
+lambda [angstrom]           = 0.85
 
 # OPTIONAL SETTINGS
 
