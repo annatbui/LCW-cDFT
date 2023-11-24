@@ -45,7 +45,6 @@ Supported external potentials for spherical geometry are:
 """
 import argparse
 import numpy as np
-import pandas
 from scipy import integrate
 
 
@@ -127,8 +126,11 @@ def load_input(filename):
 
 
 def get_data(path_to_data):
-    data = pandas.read_csv(path_to_data, skiprows=1, header=None, delim_whitespace=True).to_numpy()
-    return data[:,0], data[:,1]
+    '''
+    Load direct correlation function
+    '''
+    data = np.loadtxt(path_to_data, skiprows=1)
+    return data[:, 0], data[:, 1]
 
     
 def HS_solute(r, radius):
