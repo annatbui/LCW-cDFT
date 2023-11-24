@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 ----------------------------------------------------------------------------
-    LCW-cDFT for Solvation
+    
+    LCW-cDFT
     Copyright (C) 2023  Anna T. Bui
 
     This program is free software: you can redistribute it and/or modify
@@ -17,54 +18,59 @@
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+    
 -------------------------------------------------------------------------------
 
-Created October 2022. Last updated November 2023.
-Author: Anna T. Bui
-Email: btb32@cam.ac.uk
+    Created October 2022. Last updated November 2023.
+    Author: Anna T. Bui
+    Email: btb32@cam.ac.uk
 
-LCW-cDFT for Solvation Program.
-Calculate solvent density profiles and solvation free energies
-for non-polar spherical solutes.
+    LCW-cDFT for Solvation Program.
+        Calculate solvent density profiles and solvation free energies
+        for non-polar spherical solutes.
 
-Paper: A classical density functional theory for solvation across length scale
-Author: Anna T. Bui, Stephen J. Cox
-Available at: *** ADD URL ***
+    Paper: A classical density functional theory for solvation across length scales
+        Authors: Anna T. Bui, Stephen J. Cox
+        Available at: *** ADD URL ***
 
-Supported fluids and state points:
-    SPC/E water
-    RPBE-D3 water
-    mW water 
-    mW water
+    Supported fluids and state points:
+        SPC/E water, 300 K
+        RPBE-D3 water, 300 K
+        mW water, 300 K 
+        mW water, 426 K
 
-Supported external potentials for spherical geometry are:
-    Hard Wall (HW)
-    Lennard-Jones (LJ)
-    Attractive potential (SLJ)
+    Supported external potentials for spherical geometry are:
+        Hard sphere
+        Lennard-Jones
+        Attractive potential 
+        
 -------------------------------------------------------------------------------
 """
+from IPython import display
 import argparse
 import numpy as np
 from scipy import integrate
+import matplotlib.pyplot as plt
 
 
-#####################
-# GLOBAL CONVERSION #
-#####################
+
 # Scientific constants
-kB         = 1.38064852e-23  # unit is J/K
-NA          = 6.0221409e23  # unit is 1/mol
+kB            = 1.38064852e-23   # J/K
+NA            = 6.0221409e23     # 1/mol
 
-m_convert     = 1e3*1e24/(NA*NA) # from kJ mol^-2 cm^3 angstrom^2 to J angstrom^5
-a_convert     = 1e3*1e24/(NA*NA) # from kJ cm^3 mol^-2 to # J angstrom^3
-d_convert     = 1.0              # from angstrom to angstrom
-gamma_convert = 1e-23
+# Unit conversion
+m_convert     = 1e3*1e24/(NA*NA) # from kJ mol^-2 cm^3 AA^2 to J AA^5
+a_convert     = 1e3*1e24/(NA*NA) # from kJ cm^3 mol^-2 to # J AA^3
+d_convert     = 1.0              # from AA to AA
+gamma_convert = 1e-23            # from mJ m^-2 to J AA^-2
 
 
 def get_arguments():
-    # adds description of the program.
+    '''
+    Get argument from command line.
+    '''
     parser = argparse.ArgumentParser(
-        description="Code for cDFT."
+        description="Enter input and output files for LCW-cDFT"
     )
 
     parser.add_argument(
@@ -84,11 +90,45 @@ def get_arguments():
         default="final.out",
         help="the relative path to output file"
     )
+    
     return parser.parse_args()
 
 
+def place(ax):
+    '''
+    Make axis looks pretty
+    '''
+    ax.tick_params(direction="in", which="minor", length=3)
+    ax.tick_params(direction="in", which="major", length=5, labelsize=13)
+    ax.grid(which="major", ls="dashed", dashes=(1, 3), lw=1, zorder=0)
+
+    
 def load_input(filename):
-    '''Load input files and extract parameter'''
+    '''
+    Load input files and extract parameters
+    Return all neccessary input for program
+    '''
+    # Default parameters
+    rho_bulk            = 0.03323521
+    T                   = 300
+    delta_mu            = 1e-3
+    liquid_coex         = 0.033234
+    vapor_coex          = 4.747e-7
+    gamma               = 63.6
+    d                   = 1.54
+    coarse_grain_length = 0.85
+    a                   = 200
+    dcf_file            = '../parameters/dcf_ck_spce_rho_u.txt'
+    HS_RADIUS           = 2.0
+    initial_guess       = 'bulk'
+    alpha_full          = 0.05
+    alpha_slow          = 0.15
+    k_cutoff            = 2000
+    max_FT              = 25
+    r_max               = 30
+    r_min               = 5e-3
+    dr                  = 0.01
+    
     with open(filename) as fh:
         for line in fh:
             line = line.partition('#')[0]
@@ -121,11 +161,13 @@ def load_input(filename):
                     initial_guess = words[-1]    
             
     return  rho_bulk, T, delta_mu, liquid_coex, vapor_coex, \
-            gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS, initial_guess 
+            gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS, \
+            initial_guess, alpha_full, alpha_slow, k_cutoff, \
+            dr, r_min, r_max, max_FT 
 
 
 
-def get_data(path_to_data):
+def get_dcf(path_to_data):
     '''
     Load direct correlation function
     '''
@@ -162,27 +204,34 @@ def get_invrFT(f, k):
         integrand = k * f * np.sin(k*r) / (r * 2 * np.pi * np.pi) 
         result.append(integrate.simpson(integrand, k))
     f_r = np.array(result) 
-    f_r[4000:] = f_r[4000]
+    f_r[array_len_last:] = f_r[array_len_last]
     return f_r 
 
 
 def Gaussian_in_kspace(k, sigma):
+    '''
+    Gaussian function in reciprocal space
+    '''
     return np.exp(-0.5*np.power(k,2)*np.power(sigma,2))
 
 
-def Gaussian_in_rspace(r, sigma):
-    return np.exp(-r**2 /(2 * sigma**2)) / np.power((sigma * np.sqrt(2 * np.pi)),3)
-
 def w(n):
-    energy = 2 * m * np.power(n-liquid_coex,2) * np.power(n-vapor_coex,2)/ (np.power(d,2)*np.power(liquid_coex-vapor_coex,2)) - n*delta_mu
+    '''
+    Local grand potential density
+    '''
+    energy = 2 * m * np.power(n-liquid_coex,2) * np.power(n-vapor_coex,2) \
+        / (np.power(d,2)*np.power(liquid_coex-vapor_coex,2)) - n*delta_mu
     return energy
 
 def w_prime(n):
+    '''
+    Derivative of local grand potential density wrt density
+    '''
     first_prefactor = 4 * m / np.power(d,2) * np.power(liquid_coex-vapor_coex, 2)
-    first_bracket   = np.power(n-liquid_coex,2) * (n-vapor_coex) + np.power(n-vapor_coex,2) * (n-liquid_coex)
+    first_bracket   = np.power(n-liquid_coex,2) * (n-vapor_coex) \
+                    + np.power(n-vapor_coex,2) * (n-liquid_coex)
     second_term     = - delta_mu
     return first_prefactor * first_bracket + second_term
-    
 
 
 def compute_full_density(rho_slow, rho_guess, ratio):
@@ -193,12 +242,11 @@ def compute_full_density(rho_slow, rho_guess, ratio):
     # initial guess
     rho_trial = rho_guess
     rho_old   = np.zeros(r_.shape)
-    
-    
+
 
     # iterative loop
     while np.allclose(rho_trial,rho_old, rtol=1e-4, atol=1e-5) is False:
-
+   
         rho_old = rho_trial
 
         
@@ -223,7 +271,8 @@ def compute_full_density(rho_slow, rho_guess, ratio):
 
 def compute_slow_density(rho_full, rho_guess):
     '''
-    Compute slow density according to vDW with unbalanced force from given full density, guess from previous iteration
+    Compute slow density according to vDW with unbalanced force from given 
+    full density, guess from previous iteration
     '''
     
     # Coarse grain the full density
@@ -235,12 +284,12 @@ def compute_slow_density(rho_full, rho_guess):
     rho_trial = rho_guess
     rho_old = np.zeros(r_.shape)
     
-    
     # iterative loop
-    i = 0
+
     while np.allclose(rho_trial,rho_old, rtol=5e-4, atol=5e-5) is False:
         
-
+ 
+        
         rho_old = rho_trial
         
            
@@ -248,7 +297,7 @@ def compute_slow_density(rho_full, rho_guess):
         rho_slow_bar_r = get_invrFT(rho_slow_bar_k, k_)        
         
         first_term = a*np.power(coarse_grain_length,2)*rho_full_bar_r/m 
-        second_term = 0.5 * (w_prime(rho_old) - 0*w_prime(rho_bulk))*np.power(coarse_grain_length,2)/ m
+        second_term = 0.5 * w_prime(rho_old)*np.power(coarse_grain_length,2)/ m
         third_term = (1 -(a*np.power(coarse_grain_length,2)/m ))*rho_slow_bar_r
         
         rho_new = first_term - second_term + third_term
@@ -256,8 +305,6 @@ def compute_slow_density(rho_full, rho_guess):
          # Update to new density
         rho_trial = rho_old * (1 - alpha_slow) + rho_new * alpha_slow
       
-        i = i + 1
-        
     rho_final = rho_trial   
     
     # return new slowly varying density
@@ -266,7 +313,8 @@ def compute_slow_density(rho_full, rho_guess):
 
 def free_energy_large(rho_s, rho_f):
     '''
-    Returns Free energy from van der Waals functional + unbalanced energy between two densities
+    Returns Free energy from van der Waals functional 
+    + unbalanced energy between two densities
     '''
     
     #  van der Waals functional
@@ -345,20 +393,20 @@ def write_out_data(filename, full_density_final, slow_density_final):
         myfile.write("### PARAMETERS ### \n")
         myfile.write("################## \n#\n")
         myfile.write("# water model                                = SPC/E\n")
-        myfile.write("# rho_bulk [angstrom^-3]                     = {}\n".format(rho_bulk))
+        myfile.write("# rho_bulk [AA^-3]                           = {}\n".format(rho_bulk))
         myfile.write("# a [kJ cm^3 mol^-2]                         = {}\n".format(a/a_convert))
-        myfile.write("# m [kJ mol^-2 cm^3 angstrom^2]              = {}\n".format(m/m_convert))
-        myfile.write("# lambda [angstrom]                          = {}\n".format(coarse_grain_length))
-        myfile.write("# d  [angstrom]                              = {}\n".format(d))
-        myfile.write("# liquid density [angstrom^-3]               = {}\n".format(liquid_coex))
-        myfile.write("# gas density [angstrom^-3]                  = {}\n".format(vapor_coex))
+        myfile.write("# m [kJ mol^-2 cm^3 AA^2]                    = {}\n".format(m/m_convert))
+        myfile.write("# lambda [AA]                                = {}\n".format(coarse_grain_length))
+        myfile.write("# d  [AA]                                    = {}\n".format(d))
+        myfile.write("# liquid density [AA^-3]                     = {}\n".format(liquid_coex))
+        myfile.write("# gas density [AA^-3]                        = {}\n".format(vapor_coex))
         myfile.write("# surface tension [mN/m^2]                   = {}\n".format(gamma))
         myfile.write("# DCF approximation                          = interpolation\n")
         
         myfile.write("#\n############## \n")
         myfile.write("### SOLUTE ### \n")
         myfile.write("############## \n#\n")        
-        myfile.write("# HS radius [angstrom]                       = {}\n".format(HS_RADIUS))
+        myfile.write("# HS radius [AA]                             = {}\n".format(HS_RADIUS))
         
         myfile.write("#\n################### \n")
         myfile.write("### FREE ENERGY ### \n")
@@ -385,7 +433,7 @@ def write_out_data(filename, full_density_final, slow_density_final):
 
 if __name__ == "__main__":
     '''
-    MAIN FUNCTION
+    Main function for minimising LCW-cDFT 
     '''
     
     # start by getting arguments 
@@ -395,22 +443,19 @@ if __name__ == "__main__":
     
     # essenial inputs
     rho_bulk, T, delta_mu, liquid_coex, vapor_coex, \
-    gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS, initial_guess = load_input(path_to_input)
-    alpha_full = 0.05
-    alpha_slow = 0.15
-    
+    gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS, \
+    initial_guess, alpha_full, alpha_slow, k_cutoff, \
+    dr, r_min, r_max, max_FT = load_input(path_to_input)
+
     # prepare grid space
-    k_cutoff = 2000
-    r_cutoff = 5000
-    k_, c_k = get_data(dcf_file)
-    r_ = np.linspace(5e-3,50,5000)
-   
-    k_, c_k = k_[:k_cutoff], c_k[:k_cutoff]
-    r_ = r_[:r_cutoff]
-    dr = r_[1] - r_[0]
-    r_extend = np.arange(r_[-1]+dr,50,dr)
-    r_ = np.concatenate([r_, r_extend])
+    k_, c_k = get_dcf(dcf_file)
+    array_len = int(r_max/dr)
+    array_len_last = array_len - int(max_FT/dr) # for FT
     
+    r_ = np.linspace(r_min,r_max,array_len)
+    k_, c_k = k_[:k_cutoff], c_k[:k_cutoff]
+    
+
     # unit conversion
     beta = 1/(kB * T)
     delta_mu = delta_mu * kB * T
@@ -424,7 +469,8 @@ if __name__ == "__main__":
     # FIRST ITERATION INITIALISATION
     if initial_guess != 'bulk':
         distance = float(initial_guess)
-        rho_guess = 0.5*((liquid_coex + vapor_coex)+(liquid_coex - vapor_coex)*np.tanh((r_-HS_RADIUS+distance)/d))
+        rho_guess = 0.5*((liquid_coex + vapor_coex)+(liquid_coex - vapor_coex) \
+                         *np.tanh((r_-HS_RADIUS+distance)/d))
     else:
         rho_guess = rho_bulk
     
@@ -443,7 +489,6 @@ if __name__ == "__main__":
     slow_density_old = 0*slow_density_trial
     
     # ITERATION LOOP: GUESS SLOW AND FULL DENSITY
-    i = 1
     while np.allclose(slow_density_trial, slow_density_old,  rtol=8e-4, atol=5e-5) is False:
         
         slow_density_old = slow_density_trial
