@@ -15,10 +15,10 @@ interfacial_thickness [AA]  = 1.54
 
 # SOLUTE PROPERTIES
 
-type                        = hard-sphere
+solute_type                 = HS
 HS_radius [AA]              = 2
-LJ_epsilon [kcal mol-1]     = 0 
-LJ_sigma  [AA]              = 0
+#LJ_epsilon [kcal mol-1]     = 0 
+#LJ_sigma  [AA]              = 0
 
 # COARSE-GRAINING PARAMETERS
 

@@ -63,7 +63,8 @@ m_convert     = 1e3*1e24/(NA*NA) # from kJ mol^-2 cm^3 AA^2 to J AA^5
 a_convert     = 1e3*1e24/(NA*NA) # from kJ cm^3 mol^-2 to # J AA^3
 d_convert     = 1.0              # from AA to AA
 gamma_convert = 1e-23            # from mJ m^-2 to J AA^-2
-
+kcal_to_J     = 4184
+infty         = 1e100
 
 def get_arguments():
     '''
@@ -110,7 +111,7 @@ def load_input(filename):
     '''
     # Default parameters
     rho_bulk            = 0.03323521
-    T                   = 300
+    temperature         = 300
     delta_mu            = 1e-3
     liquid_coex         = 0.033234
     vapor_coex          = 4.747e-7
@@ -119,15 +120,25 @@ def load_input(filename):
     coarse_grain_length = 0.85
     a                   = 200
     dcf_file            = '../parameters/dcf_ck_spce_rho_u.txt'
-    HS_RADIUS           = 2.0
     initial_guess       = 'bulk'
     alpha_full          = 0.05
     alpha_slow          = 0.15
+    rtol                = 1e-5
+    atol                = 1e-6 
     k_cutoff            = 2000
     max_FT              = 25
     r_max               = 30
     r_min               = 5e-3
     dr                  = 0.01
+    solute_type         = 'HS'
+    HS_radius           = 2.0
+    LJ_sigma            = 1.0
+    LJ_epsilon          = 1.0
+    ATT_epsilon         = 1.0
+    ATT_sigma           = 1.0
+    ATT_radius          = 1.0
+
+    
     
     with open(filename) as fh:
         for line in fh:
@@ -138,7 +149,7 @@ def load_input(filename):
                 if   words[0] == 'bulk_density':
                     rho_bulk    = float(words[-1])
                 elif words[0] == 'temperature':
-                    T           = float(words[-1])
+                    temperature = float(words[-1])
                 elif words[0] == 'chemical_potential':
                     delta_mu    = float(words[-1])
                 elif words[0] == 'liquid_coex_density':
@@ -155,15 +166,26 @@ def load_input(filename):
                     a           = float(words[-1])
                 elif words[0] == 'dcf_kspace':
                     dcf_file    = words[-1]
-                elif words[0] == 'HS_radius':
-                    HS_RADIUS   = float(words[-1])
                 elif words[0] == 'initial_guess':
                     initial_guess = words[-1]    
+                elif words[0] == 'HS_radius':
+                    HS_radius   = float(words[-1])
+                elif words[0] == 'LJ_sigma':
+                    LJ_sigma   = float(words[-1])
+                elif words[0] == 'LJ_epsilon':
+                    LJ_epsilon   = float(words[-1])
+                elif words[0] == 'ATT_sigma':
+                    ATT_sigma   = float(words[-1])
+                elif words[0] == 'ATT_epsilon':
+                    ATT_epsilon   = float(words[-1])
+                elif words[0] == 'ATT_radius':
+                    ATT_radius   = float(words[-1])
             
-    return  rho_bulk, T, delta_mu, liquid_coex, vapor_coex, \
-            gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS, \
-            initial_guess, alpha_full, alpha_slow, k_cutoff, \
-            dr, r_min, r_max, max_FT 
+    return  rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
+            gamma, d, coarse_grain_length, a, dcf_file, \
+            initial_guess, alpha_full, alpha_slow, rtol, atol, \
+            k_cutoff, dr, r_min, r_max, max_FT, solute_type, \
+            HS_radius, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius
 
 
 
@@ -174,12 +196,47 @@ def get_dcf(path_to_data):
     data = np.loadtxt(path_to_data, skiprows=1)
     return data[:, 0], data[:, 1]
 
+
+
+def ATT_solute(r, epsilon_sf, sigma_s, Rs):
+    '''
+    Lennard Jones wall
+        epsilon: in kcal mol^-1 
+        sigma: in angstrom
+    '''
+    rmin = sigma_s*(2/5)**(1/6)
+    rp = rmin + r
+    power3 = (1/(rp + Rs))**3 - (1/(rp - Rs))**3
+    power9 = (1/(rp - Rs))**9 - (1/(rp + Rs))**9
+    power2 = (1/(rp - Rs))**2 - (1/(rp + Rs))**2
+    power8 = (1/(rp + Rs))**8 - (1/(rp - Rs))**8
     
+  
+    energy = epsilon_sf * (2*np.power(sigma_s,9)*power9/15 + 3*np.power(sigma_s,9)*power8/(20*rp) + np.power(sigma_s,3)*power3 +  3*np.power(sigma_s,3)*power2/(2*rp) )
+    energy[r <  Rs] = infty
+    return energy * kcal_to_J / NA 
+
+def LJ_solute(r, epsilon, sigma):
+    '''
+    Lennard Jones solute
+        epsilon: in kcal mol^-1 
+        sigma: in angstrom
+    '''
+    rc = sigma + 13
+    power6 = (sigma/r)**6
+    power12 = power6**2
+    shift = 4*epsilon*((sigma/rc)**12 - (sigma/rc)**6)
+    energy = 4*epsilon*(power12-power6) - shift
+    energy[r >= rc] = 0
+    return energy * kcal_to_J / NA
+
+
+
 def HS_solute(r, radius):
     '''
     Solute external potential
     '''
-    energy = r*0+1e100
+    energy = r*0 + infty
     energy[r >= radius] = 0
     return energy  
 
@@ -249,7 +306,7 @@ def compute_full_density(rho_slow, rho_guess, ratio):
     place(ax)
 
     # iterative loop
-    while np.allclose(rho_trial,rho_old, rtol=1e-4, atol=1e-5) is False:
+    while np.allclose(rho_trial,rho_old, rtol, atol) is False:
         ax.plot(r_, rho_trial/rho_bulk)
         display.display(fig)
         display.clear_output(wait=True)
@@ -266,7 +323,7 @@ def compute_full_density(rho_slow, rho_guess, ratio):
         gamma = pre_gamma_r * rho_slow/ np.power(rho_bulk, 2)        
         
         # compute RHS
-        rho_new = rho_slow * np.exp(-beta*HS_solute(r_, HS_RADIUS) + ratio * gamma)
+        rho_new = rho_slow * np.exp(-beta*HS_solute(r_, HS_radius) + ratio * gamma)
         
         # update to new density
         rho_trial = rho_old * (1-alpha_full) + rho_new * alpha_full
@@ -297,7 +354,7 @@ def compute_slow_density(rho_full, rho_guess):
     place(ax)    
     # iterative loop
 
-    while np.allclose(rho_trial,rho_old, rtol=5e-4, atol=5e-5) is False:
+    while np.allclose(rho_trial,rho_old, rtol, atol) is False:
         
         ax.plot(r_, rho_trial/rho_bulk)
         display.display(fig)
@@ -358,14 +415,14 @@ def free_energy_small(rho_f, rho_s):
     '''
     
     # ideal term
-    rho_s[rho_s==0] = 1e-23
+    rho_s[rho_s==0] = 1e-100
     ratio           = rho_f/rho_s
     ratio[ratio==0] = 1
     integrand       =  r_ * r_ * (rho_f * np.log(ratio) - rho_f + rho_s)
-    free_energy_id  = 4 * np.pi * kB * T * integrate.simpson(integrand, r_)
+    free_energy_id  = 4 * np.pi * kB * temperature * integrate.simpson(integrand, r_)
     
     # external term
-    integrand       = r_ * r_ * HS_solute(r_, HS_RADIUS) * rho_f
+    integrand       = r_ * r_ * external_potential * rho_f
     free_energy_ext = 4 * np.pi * integrate.simpson(integrand, r_)
     
     # excess term
@@ -379,7 +436,7 @@ def free_energy_small(rho_f, rho_s):
     gamma                = pre_gamma_r * rho_s / np.power(rho_bulk, 2)
     
     integrand            =  r_ * r_ * (rho_f - rho_s)  * gamma
-    free_energy_exc      = -0.5 * kB * T * 4 * np.pi * integrate.simpson(integrand, r_)
+    free_energy_exc      = -0.5 * kB * temperature * 4 * np.pi * integrate.simpson(integrand, r_)
     
     return free_energy_id*1e-3*NA, free_energy_ext*1e-3*NA, free_energy_exc*1e-3*NA
     
@@ -404,7 +461,7 @@ def write_out_data(filename, full_density_final, slow_density_final):
     F_small = F_id + F_ext + F_exc - F_u
     
     F_solv = F_small + F_large
-    F_solv_area = 1e3 * F_solv/(1e-3 * NA * 4 * np.pi * 1e-20 * np.power(HS_RADIUS,2))
+    F_solv_area = 1e3 * F_solv/(1e-3 * NA * 4 * np.pi * 1e-20 * np.power(HS_radius,2))
     
     with open(filename, "a") as myfile:
         myfile.write("#\n################## \n")
@@ -418,13 +475,13 @@ def write_out_data(filename, full_density_final, slow_density_final):
         myfile.write("# d  [AA]                                    = {}\n".format(d))
         myfile.write("# liquid density [AA^-3]                     = {}\n".format(liquid_coex))
         myfile.write("# gas density [AA^-3]                        = {}\n".format(vapor_coex))
-        myfile.write("# surface tension [mN/m^2]                   = {}\n".format(gamma))
+        myfile.write("# surface tension [mN/m^2]                   = {}\n".format(gamma/gamma_convert))
         myfile.write("# DCF approximation                          = interpolation\n")
         
         myfile.write("#\n############## \n")
         myfile.write("### SOLUTE ### \n")
         myfile.write("############## \n#\n")        
-        myfile.write("# HS radius [AA]                             = {}\n".format(HS_RADIUS))
+        myfile.write("# HS radius [AA]                             = {}\n".format(HS_radius))
         
         myfile.write("#\n################### \n")
         myfile.write("### FREE ENERGY ### \n")
@@ -460,40 +517,50 @@ if __name__ == "__main__":
     path_to_output = args.output_file
     
     # essenial inputs
-    rho_bulk, T, delta_mu, liquid_coex, vapor_coex, \
-    gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS, \
-    initial_guess, alpha_full, alpha_slow, k_cutoff, \
-    dr, r_min, r_max, max_FT = load_input(path_to_input)
+    rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
+    gamma, d, coarse_grain_length, a, dcf_file, \
+    initial_guess, alpha_full, alpha_slow, rtol, atol, \
+    k_cutoff, dr, r_min, r_max, max_FT, solute_type, \
+    HS_radius, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius \
+    = load_input(path_to_input)
 
     # prepare grid space
     k_, c_k = get_dcf(dcf_file)
     array_len = int(r_max/dr)
-    array_len_last = array_len - int(max_FT/dr) # for FT
-    
+    array_len_last = int(max_FT/dr) # for FT
     r_ = np.linspace(r_min,r_max,array_len)
     k_, c_k = k_[:k_cutoff], c_k[:k_cutoff]
     
 
     # unit conversion
-    beta = 1/(kB * T)
-    delta_mu = delta_mu * kB * T
+    beta = 1/(kB * temperature)
+    delta_mu = delta_mu * kB * temperature
     gamma = gamma * gamma_convert
     d = d * d_convert
     a = a * a_convert
     m = 3 * d * gamma / np.power(liquid_coex-vapor_coex,2)
 
-
+    # external potential
+    if solute_type == 'HS':
+        external_potential = HS_solute(r_, HS_radius)
+        edge = HS_radius
+    elif solute_type == 'LS':
+        external_potential = LJ_solute(r_, LJ_epsilon, LJ_sigma)
+        edge = LJ_sigma
+    elif solute_type == 'ATT':
+        edge = ATT_radius
+        external_potential = ATT_solute(r_, ATT_epsilon, ATT_sigma, ATT_radius)
     
     # FIRST ITERATION INITIALISATION
     if initial_guess != 'bulk':
         distance = float(initial_guess)
         rho_guess = 0.5*((liquid_coex + vapor_coex)+(liquid_coex - vapor_coex) \
-                         *np.tanh((r_-HS_RADIUS+distance)/d))
+                         *np.tanh((r_-edge+distance)/d))
     else:
         rho_guess = rho_bulk
     
     
-    full_density_guess = rho_guess * np.exp(-beta*HS_solute(r_, HS_RADIUS))
+    full_density_guess = rho_guess * np.exp(-beta*external_potential)
     slow_density_guess = np.ones(r_.shape) * rho_guess
     
     slow_density_old   = slow_density_guess
@@ -504,10 +571,10 @@ if __name__ == "__main__":
         
     slow_density_new   = compute_slow_density(full_density_new, slow_density_guess_r)
     slow_density_trial = slow_density_new
-    slow_density_old = 0*slow_density_trial
+    slow_density_old   = 0*slow_density_trial
     
     # ITERATION LOOP: GUESS SLOW AND FULL DENSITY
-    while np.allclose(slow_density_trial, slow_density_old,  rtol=8e-4, atol=5e-5) is False:
+    while np.allclose(slow_density_trial, slow_density_old,  rtol, atol) is False:
         
         slow_density_old = slow_density_trial
         full_density_new = compute_full_density(slow_density_old, full_density_new, 1)
