@@ -1,0 +1,31 @@
+# FLUID PROPERTIES
+
+model                       = SPC/E
+bulk_density [AA-3]	        = 0.03323521
+dcf_kspace [file_path]	    = ../../parameters/dcf_ck_spce_rho_u.txt
+temperature [K]             = 300
+chemical_potential [kBT]    = 1e-3
+
+# COEXISTENCE PROPERTIES
+
+surface_tension [mJ m-2]    = 63.6
+liquid_coex_density [AA-3]  = 0.033234
+vapor_coex_density [AA-3]   = 4.747e-7
+interfacial_thickness [AA]  = 1.54
+
+# SOLUTE PROPERTIES
+
+type 		                = hard-sphere
+HS_radius [AA]              = 2
+LJ_epsilon [kcal mol-1]     = 0 
+LJ_sigma  [AA]              = 0
+
+# COARSE-GRAINING PARAMETERS
+
+a [kJ cm3 mol-2]            = 170
+lambda [angstrom]           = 0.8
+
+# PICARD MIX
+
+alpha_full                  = 0.05 
+alpha_slow                  = 0.15
