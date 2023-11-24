@@ -2,7 +2,7 @@
 
 model                       = SPC/E
 bulk_density [AA-3]	        = 0.03323521
-dcf_kspace [file_path]	    = ../../parameters/dcf_ck_spce_rho_u.txt
+dcf_kspace [file_path]	    = ../parameters/dcf_ck_spce_rho_u.txt
 temperature [K]             = 300
 chemical_potential [kBT]    = 1e-3
 
