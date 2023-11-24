@@ -118,10 +118,12 @@ def load_input(filename):
                     dcf_file    = words[-1]
                 elif words[0] == 'HS_radius':
                     HS_RADIUS   = float(words[-1])
-    
+                elif words[0] == 'initial_guess':
+                    initial_guess = words[-1]    
             
     return  rho_bulk, T, delta_mu, liquid_coex, vapor_coex, \
-            gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS, 
+            gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS, initial_guess 
+
 
 
 def get_data(path_to_data):
@@ -391,7 +393,7 @@ if __name__ == "__main__":
     
     # essenial inputs
     rho_bulk, T, delta_mu, liquid_coex, vapor_coex, \
-    gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS = load_input(path_to_input)
+    gamma, d, coarse_grain_length, a, dcf_file, HS_RADIUS, initial_guess = load_input(path_to_input)
     alpha_full = 0.05
     alpha_slow = 0.15
     
@@ -418,10 +420,16 @@ if __name__ == "__main__":
 
     
     # FIRST ITERATION INITIALISATION
-    rho_es = 0.5*((liquid_coex + vapor_coex)+(liquid_coex - vapor_coex)*np.tanh((r_-HS_RADIUS)/d))
+    if initial_guess != 'bulk':
+        distance = float(initial_guess)
+        rho_guess = 0.5*((liquid_coex + vapor_coex)+(liquid_coex - vapor_coex)*np.tanh((r_-HS_RADIUS+distance)/d))
+    else:
+        rho_guess = rho_bulk
     
-    full_density_guess = rho_bulk * np.exp(-beta*HS_solute(r_, HS_RADIUS))
-    slow_density_guess = np.ones(r_.shape) * rho_bulk
+    
+    full_density_guess = rho_guess * np.exp(-beta*HS_solute(r_, HS_RADIUS))
+    slow_density_guess = np.ones(r_.shape) * rho_guess
+    
     slow_density_old   = slow_density_guess
  
     full_density_new   = compute_full_density(slow_density_guess, full_density_guess, 0.5)

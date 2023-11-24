@@ -25,7 +25,8 @@ LJ_sigma  [AA]              = 0
 a [kJ cm3 mol-2]            = 170
 lambda [angstrom]           = 0.8
 
-# PICARD MIX
+# OPTIONAL SETTINGS
 
 alpha_full                  = 0.05 
 alpha_slow                  = 0.15
+initial_guess               = bulk
