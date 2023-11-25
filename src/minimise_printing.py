@@ -123,8 +123,8 @@ def load_input(filename):
     initial_guess       = 'bulk'
     alpha_full          = 0.05
     alpha_slow          = 0.15
-    rtol                = 1e-5
-    atol                = 1e-6 
+    rtol                = 1e-4
+    atol                = 1e-5 
     k_cutoff            = 2000
     max_FT              = 25
     r_max               = 30
@@ -388,7 +388,7 @@ def free_energy_large(rho_s, rho_f):
     '''
     
     #  van der Waals functional
-    local_term  = w(rho_s) - w(rho_bulk)*0
+    local_term  = w(rho_s) - w(rho_bulk)
     local_term[rho_s > rho_bulk] = 0
     integrand   = r_ * r_ * local_term
     free_energy_local =  4 * np.pi * integrate.simpson(integrand, r_)
@@ -467,7 +467,6 @@ def write_out_data(filename, full_density_final, slow_density_final):
         myfile.write("#\n################## \n")
         myfile.write("### PARAMETERS ### \n")
         myfile.write("################## \n#\n")
-        myfile.write("# water model                                = SPC/E\n")
         myfile.write("# rho_bulk [AA^-3]                           = {}\n".format(rho_bulk))
         myfile.write("# a [kJ cm^3 mol^-2]                         = {}\n".format(a/a_convert))
         myfile.write("# m [kJ mol^-2 cm^3 AA^2]                    = {}\n".format(m/m_convert))
@@ -476,7 +475,7 @@ def write_out_data(filename, full_density_final, slow_density_final):
         myfile.write("# liquid density [AA^-3]                     = {}\n".format(liquid_coex))
         myfile.write("# gas density [AA^-3]                        = {}\n".format(vapor_coex))
         myfile.write("# surface tension [mN/m^2]                   = {}\n".format(gamma/gamma_convert))
-        myfile.write("# DCF approximation                          = interpolation\n")
+        myfile.write("# temperature [K]                            = {}\n".format(temperature))
         
         myfile.write("#\n############## \n")
         myfile.write("### SOLUTE ### \n")
@@ -554,7 +553,7 @@ if __name__ == "__main__":
     # FIRST ITERATION INITIALISATION
     if initial_guess != 'bulk':
         distance = float(initial_guess)
-        rho_guess = 0.5*((liquid_coex + vapor_coex)+(liquid_coex - vapor_coex) \
+        rho_guess = 0.5*((rho_bulk + vapor_coex)+(rho_bulk - vapor_coex) \
                          *np.tanh((r_-edge+distance)/d))
     else:
         rho_guess = rho_bulk
