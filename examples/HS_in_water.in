@@ -13,7 +13,7 @@ liquid_coex_density [AA-3]  = 0.033234
 vapor_coex_density [AA-3]   = 4.747e-7
 interfacial_thickness [AA]  = 1.54
 
-# SOLUTE PROPERTIES
+# EXTERNAL POTENTIAL
 
 solute_type                 = HS
 HS_radius [AA]              = 2

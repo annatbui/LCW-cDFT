@@ -52,7 +52,12 @@ import numpy as np
 from scipy import integrate
 import matplotlib.pyplot as plt
 
-
+params = {"axes.labelsize": 14,
+          "axes.titlesize": 25,}
+plt.rcParams["axes.linewidth"] = 1
+plt.rcParams['mathtext.bf'] = 'STIXGeneral:italic:bold'
+plt.rcParams['figure.dpi'] = 100
+plt.rcParams.update(params)
 
 # Scientific constants
 kB            = 1.38064852e-23   # J/K
@@ -294,7 +299,7 @@ def w_prime(n):
     return first_prefactor * first_bracket + second_term
 
 
-def compute_full_density(rho_slow, rho_guess, ratio):
+def update_full_dens(rho_slow, rho_guess, ratio):
     '''
     Compute full density by minimisation of the functional
     '''
@@ -303,9 +308,10 @@ def compute_full_density(rho_slow, rho_guess, ratio):
     rho_trial = rho_guess
     rho_old   = np.zeros(r_.shape)
     
-    fig, ax = plt.subplots(1, 1, figsize=(12, 4))
-    ax.set_ylim(-0.01,4)
-    
+    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    ax.set_ylim(-0.05,3.05)
+    ax.set_ylabel(r'$\rho(r)/\rho_{\mathrm{u}}$')
+    ax.set_xlabel(r'$r$ [$\mathrm{\AA}$]')
     place(ax)
 
     # iterative loop
@@ -336,7 +342,7 @@ def compute_full_density(rho_slow, rho_guess, ratio):
     return rho_final
 
 
-def compute_slow_density(rho_full, rho_guess):
+def update_slow_dens(rho_full, rho_guess):
     '''
     Compute slow density according to vDW with unbalanced force from given 
     full density, guess from previous iteration
@@ -351,8 +357,10 @@ def compute_slow_density(rho_full, rho_guess):
     rho_trial = rho_guess
     rho_old = np.zeros(r_.shape)
     
-    fig, ax = plt.subplots(1, 1, figsize=(12, 4))
-    ax.set_ylim(-0.01,4)
+    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    ax.set_ylim(-0.05,3.05)
+    ax.set_ylabel(r'$\rho_{\mathrm{s}}(r)/\rho_{\mathrm{u}}$')
+    ax.set_xlabel(r'$r$ [$\mathrm{\AA}$]')
     
     place(ax)    
     # iterative loop
@@ -444,27 +452,45 @@ def free_energy_small(rho_f, rho_s):
     return free_energy_id*J_to_kJmol, free_energy_ext*J_to_kJmol, free_energy_exc*J_to_kJmol
 
 
-header_text = '''
--------------------------------------------------------------
+header_text = '''-------------------------------------------------------------------------------
 Output file from LCW-cDFT
 
 Copyright (C) 2023 Anna T. Bui
--------------------------------------------------------------
+-------------------------------------------------------------------------------
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+    
+-------------------------------------------------------------------------------
+
+Paper: A classical density functional theory for solvation across length scales
+    Authors: Anna T. Bui, Stephen J. Cox
+    Available at: *** ADD URL ***
+
+-------------------------------------------------------------------------------
 
 DENSITY PROFILES
 
-r [AA]      |   full_density [AA^-3]   |   slow_density [AA^-3] 
+r [AA]   |  full_density [AA^-3]  |  slow_density [AA^-3] 
 '''
 
-def write_out_data(filename, full_density_final, slow_density_final):
+def write_out_data(filename, full_dens_final, slow_dens_final):
     '''
     Write out data
     '''
 
-    np.savetxt(filename, np.c_[r_,full_density_final,slow_density_final], header=header_text)
-    
-    F_local, F_gradient, F_u = free_energy_large(slow_density_final, full_density_final)
-    F_id, F_ext, F_exc       = free_energy_small(full_density_final, slow_density_final)
+    F_local, F_gradient, F_u = free_energy_large(slow_dens_final, full_dens_final)
+    F_id, F_ext, F_exc       = free_energy_small(full_dens_final, slow_dens_final)
     
     F_large = F_local + F_gradient + F_u
     F_small = F_id + F_ext + F_exc - F_u
@@ -472,51 +498,68 @@ def write_out_data(filename, full_density_final, slow_density_final):
     F_solv = F_small + F_large
     F_solv_area = 1e3 * F_solv/(1e-3 * NA * 4 * np.pi * 1e-20 * np.power(HS_radius,2))
     
-    with open(filename, "a") as myfile:
-        myfile.write("#\n################## \n")
-        myfile.write("### PARAMETERS ### \n")
-        myfile.write("################## \n#\n")
-        myfile.write("# rho_bulk [AA^-3]                           = {}\n".format(rho_bulk))
-        myfile.write("# a [kJ cm^3 mol^-2]                         = {}\n".format(a/a_convert))
-        myfile.write("# m [kJ mol^-2 cm^3 AA^2]                    = {}\n".format(m/m_convert))
-        myfile.write("# lambda [AA]                                = {}\n".format(cg_length))
-        myfile.write("# d  [AA]                                    = {}\n".format(d))
-        myfile.write("# liquid density [AA^-3]                     = {}\n".format(liquid_coex))
-        myfile.write("# gas density [AA^-3]                        = {}\n".format(vapor_coex))
-        myfile.write("# surface tension [mN/m^2]                   = {}\n".format(gamma/gamma_convert))
-        myfile.write("# temperature [K]                            = {}\n".format(temperature))
-        
-        myfile.write("#\n############## \n")
-        myfile.write("### SOLUTE ### \n")
-        myfile.write("############## \n#\n")        
-        myfile.write("# HS radius [AA]                             = {}\n".format(HS_radius))
-        
-        myfile.write("#\n################### \n")
-        myfile.write("### FREE ENERGY ### \n")
-        myfile.write("################### \n#\n")
-        myfile.write("# Local van der Waals [kJ/mol]               = {}\n".format(F_local))
-        myfile.write("# Gradient van der Waals [kJ/mol]            = {}\n".format(F_gradient))
-        myfile.write("# Unbalanced energy [kJ/mol]                 = {}\n".format(F_u))
-        myfile.write("# Total large length scale term [kJ/mol]     = {}\n".format(F_large))        
-        myfile.write("# \n")
-        myfile.write("# Ideal term [kJ/mol]                        = {}\n".format(F_id))
-        myfile.write("# External term [kJ/mol]                     = {}\n".format(F_ext))
-        myfile.write("# Unbalanced term [kJ/mol]                   = {}\n".format(-F_u))
-        myfile.write("# Excess term [kJ/mol]                       = {}\n".format(F_exc))
-        myfile.write("# Total small length scale term [kJ/mol]     = {}\n".format(F_small))
-        myfile.write("# \n")
-        myfile.write("# Total free energy of solvation [kJ/mol]    = {}\n".format(F_solv))
-        myfile.write("# Free energy of solvation per area [mJ/m^2] = {}\n".format(F_solv_area))
-        
+    footer_text = '''
+
+-------------------------------------------------------------------------------
+PARAMETERS OF SOLVENTS
+-------------------------------------------------------------------------------
+
+bulk_density [AA^-3]                    = {:.8f}
+temperature [K]                         = {:.1f}
+
+liquid_coex_density [AA^-3]             = {:.8f}
+gas_coex_density [AA^-3]                = {:.8f}
+gamma [mJ m^-2]                         = {:.2f}
+d [AA]                                  = {:.2f}
+m [kJ mol^-2 cm^3 AA^2]                 = {:.2f}
+
+a [kJ cm^3 mol^-2]                      = {:.2f}
+lambda [AA]                             = {:.3f}
+
+-------------------------------------------------------------------------------
+EXTERNAL POTENTIAL
+-------------------------------------------------------------------------------
+
+{}
+
+-------------------------------------------------------------------------------
+FREE ENERGY OF SOLVATION    
+-------------------------------------------------------------------------------
+
+Local van der Waals [kJ/mol]            = {:.6f}
+Gradient van der Waals [kJ/mol]         = {:.6f}
+Unbalanced energy [kJ/mol]              = {:.6f}
+Combined large length scale [kJ/mol]    = {:.6f}
+
+Ideal term [kJ/mol]                     = {:.6f}
+External term [kJ/mol]                  = {:.6f}
+Unbalanced term [kJ/mol]                = {:.6f}
+Excess term [kJ/mol]                    = {:.6f}
+Combined small length scale [kJ/mol]    = {:.6f}
+
+Solvation free energy [kJ/mol]          = {:.6f}
+Solvation free energy per area [mJ/m^2] = {:.6f}
+
+-----------------------------------END OF OUTPUT------------------------------'''.format( \
+        rho_bulk, temperature, \
+        liquid_coex, vapor_coex, gamma/gamma_convert, d, m/m_convert, \
+        a/a_convert, cg_length, external_potential_text, \
+        F_local, F_gradient, F_u, F_large, \
+        F_id, F_ext, -F_u, F_exc, F_small, \
+        F_solv, F_solv_area)
+    
+    
+    np.savetxt(filename, np.c_[r_,full_dens_final,slow_dens_final], \
+                fmt='%.10e', header=header_text, footer=footer_text)
+    
 
     
-################
-# MAIN PROGRAM #
-################
 
 if __name__ == "__main__":
     '''
-    Main function for minimising LCW-cDFT 
+    Main program for minimising LCW-cDFT 
+    Solve for the equilibrium full density and
+    slowly varying density self-consistently.
     '''
     
     # start by getting arguments 
@@ -551,12 +594,19 @@ if __name__ == "__main__":
     # external potential
     if solute_type == 'HS':
         external_potential = HS_solute(r_, HS_radius)
+        external_potential_text = 'HS solute, R [AA] = {}'.format(HS_radius)
         edge = HS_radius
-    elif solute_type == 'LS':
+    elif solute_type == 'LJ':
         external_potential = LJ_solute(r_, LJ_epsilon, LJ_sigma)
+        external_potential_text = 'LJ solute, sigma [AA] = {}, \
+                                epsilon [kcal mol^-1] = {}'.format(LJ_sigma, LJ_epsilon)
         edge = LJ_sigma
     elif solute_type == 'ATT':
         edge = ATT_radius
+        external_potential_text = 'ATT solute, radius [AA] = {}, \
+                                epsilon [kcal mol^-1] = {}, \
+                                sigma [AA] = {}'.format( \
+                                ATT_radius, ATT_epsilon, ATT_sigma)
         external_potential = ATT_solute(r_, ATT_epsilon, ATT_sigma, ATT_radius)
     
     # FIRST ITERATION INITIALISATION
@@ -568,32 +618,36 @@ if __name__ == "__main__":
         rho_guess = rho_bulk
     
     
-    full_density_guess = rho_guess * np.exp(-beta*external_potential)
-    slow_density_guess = np.ones(r_.shape) * rho_guess
+    # start with an initial guess for both the full and slow density
+    full_dens_guess = rho_guess * np.exp(-beta*external_potential)
+    slow_dens_guess = np.ones(r_.shape) * rho_guess
     
-    slow_density_old   = slow_density_guess
- 
-    full_density_new   = compute_full_density(slow_density_guess, full_density_guess, 0.5)
-    slow_density_guess_k = get_rFT(full_density_new, r_) * Gaussian_kspace(k_, 1)
-    slow_density_guess_r = get_invrFT(slow_density_guess_k, k_)
+    # The first cycle
+    full_dens_new   = update_full_dens(slow_dens_guess, full_dens_guess, 0.5)
+    slow_dens_guess_k = get_rFT(full_dens_new, r_) * Gaussian_kspace(k_, 1)
+    slow_dens_guess_r = get_invrFT(slow_dens_guess_k, k_)
         
-    slow_density_new   = compute_slow_density(full_density_new, slow_density_guess_r)
-    slow_density_trial = slow_density_new
-    slow_density_old   = 0*slow_density_trial
+    slow_dens_new   = update_slow_dens(full_dens_new, slow_dens_guess_r)
+    slow_dens_trial = slow_dens_new
+    slow_dens_old   = 0*slow_dens_trial
     
-    # ITERATION LOOP: GUESS SLOW AND FULL DENSITY
-    while np.allclose(slow_density_trial, slow_density_old,  rtol, atol) is False:
+    # Iterative loop: update both full and slow density if not converged
+    while np.allclose(slow_dens_trial, slow_dens_old,  rtol, atol) is False:
         
-        slow_density_old = slow_density_trial
-        full_density_new = compute_full_density(slow_density_old, full_density_new, 1)
-        slow_density_new = compute_slow_density(full_density_new, slow_density_new)
-        slow_density_trial = slow_density_new
+        slow_dens_old = slow_dens_trial
+        
+        # Iterative loop: update full density if not converged
+        full_dens_new = update_full_dens(slow_dens_old, full_dens_new, 1)
+        # Iterative loop: update slow density if not converged
+        slow_dens_new = update_slow_dens(full_dens_new, slow_dens_new)
+        slow_dens_trial = slow_dens_new
     
-    slow_density_final = slow_density_new
-    full_density_final = full_density_new
+    # final converged densities
+    slow_dens_final = slow_dens_new
+    full_dens_final = full_dens_new
     
-    # WRITE OUT DATA
-    write_out_data(path_to_output, full_density_final, slow_density_final)
+    # write output
+    write_out_data(path_to_output, full_dens_final, slow_dens_final)
     
 
     
