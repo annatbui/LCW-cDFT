@@ -65,6 +65,7 @@ d_convert     = 1.0              # from AA to AA
 gamma_convert = 1e-23            # from mJ m^-2 to J AA^-2
 kcal_to_J     = 4184
 infty         = 1e100
+J_to_kJmol    = 1e-3 * NA
 
 def get_arguments():
     '''
@@ -117,7 +118,7 @@ def load_input(filename):
     vapor_coex          = 4.747e-7
     gamma               = 63.6
     d                   = 1.54
-    coarse_grain_length = 0.85
+    cg_length = 0.85
     a                   = 200
     dcf_file            = '../parameters/dcf_ck_spce_rho_u.txt'
     initial_guess       = 'bulk'
@@ -161,7 +162,7 @@ def load_input(filename):
                 elif words[0] == 'interfacial_thickness':
                     d           = float(words[-1])
                 elif words[0] == 'lambda':
-                    coarse_grain_length = float(words[-1])
+                    cg_length = float(words[-1])
                 elif words[0] == 'a':
                     a           = float(words[-1])
                 elif words[0] == 'dcf_kspace':
@@ -182,7 +183,7 @@ def load_input(filename):
                     ATT_radius   = float(words[-1])
             
     return  rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
-            gamma, d, coarse_grain_length, a, dcf_file, \
+            gamma, d, cg_length, a, dcf_file, \
             initial_guess, alpha_full, alpha_slow, rtol, atol, \
             k_cutoff, dr, r_min, r_max, max_FT, solute_type, \
             HS_radius, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius
@@ -211,8 +212,10 @@ def ATT_solute(r, epsilon_sf, sigma_s, Rs):
     power2 = (1/(rp - Rs))**2 - (1/(rp + Rs))**2
     power8 = (1/(rp + Rs))**8 - (1/(rp - Rs))**8
     
-  
-    energy = epsilon_sf * (2*np.power(sigma_s,9)*power9/15 + 3*np.power(sigma_s,9)*power8/(20*rp) + np.power(sigma_s,3)*power3 +  3*np.power(sigma_s,3)*power2/(2*rp) )
+    energy = epsilon_sf * (2*np.power(sigma_s,9)*power9/15 \
+                        + 3*np.power(sigma_s,9)*power8/(20*rp) \
+                        + np.power(sigma_s,3)*power3 \
+                        +  3*np.power(sigma_s,3)*power2/(2*rp) )
     energy[r <  Rs] = infty
     return energy * kcal_to_J / NA 
 
@@ -265,7 +268,7 @@ def get_invrFT(f, k):
     return f_r 
 
 
-def Gaussian_in_kspace(k, sigma):
+def Gaussian_kspace(k, sigma):
     '''
     Gaussian function in reciprocal space
     '''
@@ -340,7 +343,7 @@ def compute_slow_density(rho_full, rho_guess):
     '''
     
     # Coarse grain the full density
-    rho_full_bar_k = get_rFT(rho_full, r_) * Gaussian_in_kspace(k_, coarse_grain_length)
+    rho_full_bar_k = get_rFT(rho_full, r_) * Gaussian_kspace(k_, cg_length)
     rho_full_bar_r = get_invrFT(rho_full_bar_k, k_)
     
 
@@ -363,12 +366,12 @@ def compute_slow_density(rho_full, rho_guess):
         rho_old = rho_trial
         
            
-        rho_slow_bar_k = get_rFT(rho_old, r_) * Gaussian_in_kspace(k_, coarse_grain_length)
+        rho_slow_bar_k = get_rFT(rho_old, r_) * Gaussian_kspace(k_, cg_length)
         rho_slow_bar_r = get_invrFT(rho_slow_bar_k, k_)        
         
-        first_term = a*np.power(coarse_grain_length,2)*rho_full_bar_r/m 
-        second_term = 0.5 * w_prime(rho_old)*np.power(coarse_grain_length,2)/ m
-        third_term = (1 -(a*np.power(coarse_grain_length,2)/m ))*rho_slow_bar_r
+        first_term = a*np.power(cg_length,2)*rho_full_bar_r/m 
+        second_term = 0.5 * w_prime(rho_old)*np.power(cg_length,2)/ m
+        third_term = (1 -(a*np.power(cg_length,2)/m ))*rho_slow_bar_r
         
         rho_new = first_term - second_term + third_term
         
@@ -399,14 +402,14 @@ def free_energy_large(rho_s, rho_f):
     free_energy_gradient =  4 * np.pi * integrate.simpson(integrand, r_)
     
     #  unbalanced energy
-    delta_rho_bar_k = get_rFT(rho_f - rho_s, r_) * Gaussian_in_kspace(k_, coarse_grain_length)
+    delta_rho_bar_k = get_rFT(rho_f - rho_s, r_) * Gaussian_kspace(k_, cg_length)
     delta_rho_bar_r = get_invrFT(delta_rho_bar_k, k_)
     integrand       = r_ * r_ * (-2 * a * delta_rho_bar_r) * rho_s
     integrand[rho_s > rho_bulk] = 0
     free_energy_u   = 4 * np.pi * integrate.simpson(integrand, r_)   
     
    
-    return free_energy_local*1e-3*NA, free_energy_gradient*1e-3*NA, free_energy_u*1e-3*NA
+    return free_energy_local*J_to_kJmol, free_energy_gradient*J_to_kJmol, free_energy_u*J_to_kJmol
 
 
 def free_energy_small(rho_f, rho_s):
@@ -438,20 +441,26 @@ def free_energy_small(rho_f, rho_s):
     integrand            =  r_ * r_ * (rho_f - rho_s)  * gamma
     free_energy_exc      = -0.5 * kB * temperature * 4 * np.pi * integrate.simpson(integrand, r_)
     
-    return free_energy_id*1e-3*NA, free_energy_ext*1e-3*NA, free_energy_exc*1e-3*NA
-    
+    return free_energy_id*J_to_kJmol, free_energy_ext*J_to_kJmol, free_energy_exc*J_to_kJmol
+
+
+header_text = '''
+-------------------------------------------------------------
+Output file from LCW-cDFT
+
+Copyright (C) 2023 Anna T. Bui
+-------------------------------------------------------------
+
+DENSITY PROFILES
+
+r [AA]      |   full_density [AA^-3]   |   slow_density [AA^-3] 
+'''
+
 def write_out_data(filename, full_density_final, slow_density_final):
     '''
     Write out data
     '''
-    header_text = '''
-    Output from LCW-MDFT minimisation \n \n
-    ############## \n
-    ## DENSITY ### \n
-    ############## \n
-    # r [AA] | full_density [AA^-3] | slow_density [AA^-3] \n 
-    '''
-    
+
     np.savetxt(filename, np.c_[r_,full_density_final,slow_density_final], header=header_text)
     
     F_local, F_gradient, F_u = free_energy_large(slow_density_final, full_density_final)
@@ -470,7 +479,7 @@ def write_out_data(filename, full_density_final, slow_density_final):
         myfile.write("# rho_bulk [AA^-3]                           = {}\n".format(rho_bulk))
         myfile.write("# a [kJ cm^3 mol^-2]                         = {}\n".format(a/a_convert))
         myfile.write("# m [kJ mol^-2 cm^3 AA^2]                    = {}\n".format(m/m_convert))
-        myfile.write("# lambda [AA]                                = {}\n".format(coarse_grain_length))
+        myfile.write("# lambda [AA]                                = {}\n".format(cg_length))
         myfile.write("# d  [AA]                                    = {}\n".format(d))
         myfile.write("# liquid density [AA^-3]                     = {}\n".format(liquid_coex))
         myfile.write("# gas density [AA^-3]                        = {}\n".format(vapor_coex))
@@ -517,7 +526,7 @@ if __name__ == "__main__":
     
     # essenial inputs
     rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
-    gamma, d, coarse_grain_length, a, dcf_file, \
+    gamma, d, cg_length, a, dcf_file, \
     initial_guess, alpha_full, alpha_slow, rtol, atol, \
     k_cutoff, dr, r_min, r_max, max_FT, solute_type, \
     HS_radius, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius \
@@ -565,7 +574,7 @@ if __name__ == "__main__":
     slow_density_old   = slow_density_guess
  
     full_density_new   = compute_full_density(slow_density_guess, full_density_guess, 0.5)
-    slow_density_guess_k = get_rFT(full_density_new, r_) * Gaussian_in_kspace(k_, 1)
+    slow_density_guess_k = get_rFT(full_density_new, r_) * Gaussian_kspace(k_, 1)
     slow_density_guess_r = get_invrFT(slow_density_guess_k, k_)
         
     slow_density_new   = compute_slow_density(full_density_new, slow_density_guess_r)

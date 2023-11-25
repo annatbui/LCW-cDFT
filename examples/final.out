@@ -1,16 +1,14 @@
 # 
-#     Output from LCW-MDFT minimisation 
-#  
+# -------------------------------------------------------------
+# Output file from LCW-cDFT
 # 
-#     ############## 
+# Copyright (C) 2023 Anna T. Bui
+# -------------------------------------------------------------
 # 
-#     ## DENSITY ### 
+# DENSITY PROFILES
 # 
-#     ############## 
+# r [AA]      |   full_density [AA^-3]   |   slow_density [AA^-3] 
 # 
-#     # r [AA] | full_density [AA^-3] | slow_density [AA^-3] 
-#  
-#     
 5.000000000000000104e-03 0.000000000000000000e+00 2.573071344175040243e-02
 1.500166722240747069e-02 0.000000000000000000e+00 2.573112293673466763e-02
 2.500333444481494041e-02 0.000000000000000000e+00 2.573194193665352680e-02
@@ -3037,15 +3035,15 @@
 ################### 
 #
 # Local van der Waals [kJ/mol]               = 0.5467109752204755
-# Gradient van der Waals [kJ/mol]            = 5.7545874703279675e-05
-# Unbalanced energy [kJ/mol]                 = 7.107626991653754
-# Total large length scale term [kJ/mol]     = 7.654395512748932
+# Gradient van der Waals [kJ/mol]            = 5.754587470327967e-05
+# Unbalanced energy [kJ/mol]                 = 7.107626991653753
+# Total large length scale term [kJ/mol]     = 7.654395512748931
 # 
-# Ideal term [kJ/mol]                        = 3.28580259337321
+# Ideal term [kJ/mol]                        = 3.2858025933732096
 # External term [kJ/mol]                     = 0.0
-# Unbalanced term [kJ/mol]                   = -7.107626991653754
+# Unbalanced term [kJ/mol]                   = -7.107626991653753
 # Excess term [kJ/mol]                       = 0.6243493377483066
-# Total small length scale term [kJ/mol]     = -3.197475060532237
+# Total small length scale term [kJ/mol]     = -3.1974750605322364
 # 
-# Total free energy of solvation [kJ/mol]    = 4.456920452216695
-# Free energy of solvation per area [mJ/m^2] = 14.723603547237925
+# Total free energy of solvation [kJ/mol]    = 4.4569204522166945
+# Free energy of solvation per area [mJ/m^2] = 14.723603547237923
