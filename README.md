@@ -29,7 +29,7 @@ Simply clone the repository:
 
 ## Usage
 
-See `examples`. 
+See `examples/getting_started.ipynb` for detailed instructions. 
 
 
 ## License

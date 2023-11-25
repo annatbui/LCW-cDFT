@@ -344,7 +344,7 @@ def update_full_dens(rho_slow, rho_guess, ratio):
 
 def update_slow_dens(rho_full, rho_guess):
     '''
-    Compute slow density according to vDW with unbalanced force from given 
+    Compute slow density according to vdW with unbalanced force from given 
     full density, guess from previous iteration
     '''
     
