@@ -276,7 +276,7 @@ def w_prime(n):
     '''
     Derivative of local grand potential density wrt density
     '''
-    first_prefactor = 4 * m / np.power(d,2) * np.power(liquid_coex-vapor_coex, 2)
+    first_prefactor = 4*m/(np.power(d,2)*np.power(liquid_coex-vapor_coex, 2))
     first_bracket   = np.power(n-liquid_coex,2) * (n-vapor_coex) \
                     + np.power(n-vapor_coex,2) * (n-liquid_coex)
     second_term     = - delta_mu
@@ -371,11 +371,12 @@ def free_energy_large(rho_s, rho_f):
     integrand   = r_ * r_ * local_term
     free_energy_local =  4 * np.pi * integrate.simpson(integrand, r_)
     
-    gradient_term = 0.5 * m * np.power(np.gradient(rho_s), 2)
-    gradient_term[rho_s > rho_bulk] = 0
-    integrand   = r_ * r_ * gradient_term
-    free_energy_gradient =  4 * np.pi * integrate.simpson(integrand, r_)
-    
+    #gradient_term = 0.5 * m * np.power(np.gradient(rho_s), 2)
+    #gradient_term[rho_s > rho_bulk] = 0
+    #integrand   = r_ * r_ * gradient_term
+    #free_energy_gradient =  4 * np.pi * integrate.simpson(integrand, r_)
+    free_energy_gradient = free_energy_local
+
     #  unbalanced energy
     delta_rho_bar_k = get_rFT(rho_f - rho_s, r_) * Gaussian_kspace(k_, cg_length)
     delta_rho_bar_r = get_invrFT(delta_rho_bar_k, k_)
