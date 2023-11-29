@@ -170,6 +170,14 @@ def load_input(filename):
                     ATT_epsilon   = float(words[-1])
                 elif words[0] == 'ATT_radius':
                     ATT_radius   = float(words[-1])
+                elif words[0] == 'r_max':
+                    r_max = float(words[-1])
+                elif words[0] == 'r_min':
+                    r_min = float(words[-1])
+                elif words[0] == 'max_FT':
+                    max_FT = float(words[-1])
+                elif words[0] == 'dr':
+                    dr = float(words[-1])                
             
     return  rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
             gamma, d, cg_length, a, dcf_file, \
@@ -371,11 +379,11 @@ def free_energy_large(rho_s, rho_f):
     integrand   = r_ * r_ * local_term
     free_energy_local =  4 * np.pi * integrate.simpson(integrand, r_)
     
-    #gradient_term = 0.5 * m * np.power(np.gradient(rho_s), 2)
-    #gradient_term[rho_s > rho_bulk] = 0
-    #integrand   = r_ * r_ * gradient_term
-    #free_energy_gradient =  4 * np.pi * integrate.simpson(integrand, r_)
-    free_energy_gradient = free_energy_local
+    gradient_term = 0.5 * m * np.power(np.gradient(rho_s, r_), 2)
+    gradient_term[rho_s > rho_bulk] = 0
+    integrand   = r_ * r_ * gradient_term
+    free_energy_gradient =  4 * np.pi * integrate.simpson(integrand, r_)
+    
 
     #  unbalanced energy
     delta_rho_bar_k = get_rFT(rho_f - rho_s, r_) * Gaussian_kspace(k_, cg_length)
