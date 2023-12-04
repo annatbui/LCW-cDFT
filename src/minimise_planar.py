@@ -71,6 +71,7 @@ c_convert     = 1e9/NA           # from J mol^-1 nm^9 to J AA^9
 kcal_to_J     = 4184
 infty         = 1e100
 J_to_kJmol    = 1e-3 * NA
+J_to_mJm2     = 1e23 
 
 def get_arguments():
     '''
@@ -123,7 +124,7 @@ def load_input(filename):
     SG_m                = 965
     cg_length           = 0.85
     a                   = 200
-    dcf_file            = '../parameters/dcf_ck_spce_rho_u.txt'
+    dcf_file            = '../parameters/dcf_cz_SPCE_rho_u_T300.txt'
     initial_guess       = 'bulk'
     alpha_full          = 0.05
     alpha_slow          = 0.15
@@ -131,11 +132,11 @@ def load_input(filename):
     atol                = 1e-5 
     k_cutoff            = 2000
     max_FT              = 25
-    r_max               = 30
-    r_min               = 5e-3
+    z_max               = 30
+    z_min               = 5e-3
     dr                  = 0.01
-    solute_type         = 'HS'
-    HS_radius           = 2.0
+    wall_type           = 'HW'
+    HW_plane            = 2.0
     LJ_sigma            = 1.0
     LJ_epsilon          = 1.0
     ATT_epsilon         = 1.0
@@ -168,12 +169,12 @@ def load_input(filename):
                     cg_length = float(words[-1])
                 elif words[0] == 'a':
                     a           = float(words[-1])
-                elif words[0] == 'dcf_kspace':
+                elif words[0] == 'dcf_zspace':
                     dcf_file    = words[-1]
                 elif words[0] == 'initial_guess':
                     initial_guess = words[-1]    
-                elif words[0] == 'HS_radius':
-                    HS_radius   = float(words[-1])
+                elif words[0] == 'HW_plane':
+                    HW_plane   = float(words[-1])
                 elif words[0] == 'LJ_sigma':
                     LJ_sigma   = float(words[-1])
                 elif words[0] == 'LJ_epsilon':
@@ -184,10 +185,10 @@ def load_input(filename):
                     ATT_epsilon   = float(words[-1])
                 elif words[0] == 'ATT_radius':
                     ATT_radius   = float(words[-1])
-                elif words[0] == 'r_max':
-                    r_max = float(words[-1])
-                elif words[0] == 'r_min':
-                    r_min = float(words[-1])
+                elif words[0] == 'z_max':
+                    z_max = float(words[-1])
+                elif words[0] == 'z_min':
+                    z_min = float(words[-1])
                 elif words[0] == 'max_FT':
                     max_FT = float(words[-1])
                 elif words[0] == 'dr':
@@ -196,8 +197,8 @@ def load_input(filename):
     return  rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
             SG_c, SG_m, cg_length, a, dcf_file, \
             initial_guess, alpha_full, alpha_slow, rtol, atol, \
-            k_cutoff, dr, r_min, r_max, max_FT, solute_type, \
-            HS_radius, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius
+            k_cutoff, dr, z_min, z_max, max_FT, wall_type, \
+            HW_plane, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius
 
 
 
@@ -208,7 +209,17 @@ def get_dcf(path_to_data):
     data = np.loadtxt(path_to_data, skiprows=1)
     return data[:, 0], data[:, 1]
 
+def Gaussian_in_zspace(z, sigma):
+    return np.exp(-z**2 /(2 * sigma**2)) / np.power((sigma * np.sqrt(2 * np.pi)),1)
 
+def coarse_grain(function, weight):
+    
+    result = dz*np.convolve(function, weight, 'same')
+    cut = int(len(result)/4)
+    result[:cut] = result[cut]
+    result[-cut:] = result[-cut]
+    
+    return result
 
 def ATT_solute(r, epsilon_sf, sigma_s, Rs):
     '''
@@ -246,44 +257,13 @@ def LJ_solute(r, epsilon, sigma):
 
 
 
-def HS_solute(r, radius):
+def hard_wall(z, wall):
     '''
     Solute external potential
     '''
-    energy = r*0 + infty
-    energy[r >= radius] = 0
+    energy = z*0 + infty
+    energy[z >= wall] = 0
     return energy  
-
-def get_rFT(h, r):
-    '''
-    Radial Fourier Transform from real to reciprocal space
-    '''
-    result = []
-    for k in k_:
-        integrand = 4 * np.pi *r * h * np.sin(k*r) / k
-        result.append(integrate.simpson(integrand, r))
-    h_k = np.array(result) 
-    return h_k
-
-
-def get_invrFT(f, k):
-    '''
-    Radial Inverse Fourier Transform from reciprocal to real space
-    '''
-    result = []
-    for r in r_:
-        integrand = k * f * np.sin(k*r) / (r * 2 * np.pi * np.pi) 
-        result.append(integrate.simpson(integrand, k))
-    f_r = np.array(result) 
-    f_r[array_len_last:] = f_r[array_len_last]
-    return f_r 
-
-
-def Gaussian_kspace(k, sigma):
-    '''
-    Gaussian function in reciprocal space
-    '''
-    return np.exp(-0.5*np.power(k,2)*np.power(sigma,2))
 
 
 def w(n):
@@ -312,34 +292,20 @@ def update_full_dens(rho_slow, rho_guess, ratio):
 
     # initial guess
     rho_trial = rho_guess
-    rho_old   = np.zeros(r_.shape)
- 
+    rho_old   = np.zeros(z_ .shape)
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-    ax.set_ylim(-0.05,3.05)
-    ax.set_ylabel(r'$\rho(r)/\rho_{\mathrm{u}}$')
-    ax.set_xlabel(r'$r$ [$\mathrm{\AA}$]')
-    place(ax)
 
     # iterative loop
     while np.allclose(rho_trial,rho_old, rtol, atol) is False:
-        ax.plot(r_, rho_trial/rho_bulk)
-        display.display(fig)
-        display.clear_output(wait=True)
-         
+    
         rho_old = rho_trial
 
         
-        delta_rho_rho_slow_r = (rho_old - rho_slow) * rho_slow 
-        delta_rho_rho_slow_k = get_rFT(delta_rho_rho_slow_r, r_)
-        
-        pre_gamma_k =  delta_rho_rho_slow_k * c_k
-        pre_gamma_r =  get_invrFT(pre_gamma_k, k_)
-        
-        gamma = pre_gamma_r * rho_slow/ np.power(rho_bulk, 2)        
+        pre_gamma_z = coarse_grain((rho_old - rho_slow) * rho_slow , c_z) 
+        gamma = pre_gamma_z * rho_slow/ np.power(rho_bulk, 2)         
         
         # compute RHS
-        rho_new = rho_slow * np.exp(-beta*HS_solute(r_, HS_radius) + ratio * gamma)
+        rho_new = rho_slow * np.exp(-beta*hard_wall(z_ , HW_plane) + ratio * gamma)
         
         # update to new density
         rho_trial = rho_old * (1-alpha_full) + rho_new * alpha_full
@@ -356,37 +322,27 @@ def update_slow_dens(rho_full, rho_guess):
     '''
     
     # Coarse grain the full density
-    rho_full_bar_k = get_rFT(rho_full, r_) * Gaussian_kspace(k_, cg_length)
-    rho_full_bar_r = get_invrFT(rho_full_bar_k, k_)
+    rho_full_bar_z = coarse_grain(rho_full , Gaussian_in_zspace(z_, cg_length)) 
     
 
     # initial guess
     rho_trial = rho_guess
-    rho_old = np.zeros(r_.shape)
+    rho_old = np.zeros(z_ .shape)
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-    ax.set_ylim(-0.05,3.05)
-    ax.set_ylabel(r'$\rho_{\mathrm{s}}(r)/\rho_{\mathrm{u}}$')
-    ax.set_xlabel(r'$r$ [$\mathrm{\AA}$]')
-    
-    place(ax)   
+
     # iterative loop
 
     while np.allclose(rho_trial,rho_old, rtol, atol) is False:
         
-        ax.plot(r_, rho_trial/rho_bulk)
-        display.display(fig)
-        display.clear_output(wait=True)
- 
+
         rho_old = rho_trial
         
            
-        rho_slow_bar_k = get_rFT(rho_old, r_) * Gaussian_kspace(k_, cg_length)
-        rho_slow_bar_r = get_invrFT(rho_slow_bar_k, k_)        
+        rho_slow_bar_z = coarse_grain(rho_old , Gaussian_in_zspace(z_, cg_length))     
         
-        first_term = a*np.power(cg_length,2)*rho_full_bar_r/SG_m
+        first_term = a*np.power(cg_length,2)*rho_full_bar_z/SG_m
         second_term = 0.5 * w_prime(rho_old)*np.power(cg_length,2)/ SG_m
-        third_term = (1 -(a*np.power(cg_length,2)/SG_m ))*rho_slow_bar_r
+        third_term = (1 -(a*np.power(cg_length,2)/SG_m ))*rho_slow_bar_z
         
         rho_new = first_term - second_term + third_term
         
@@ -407,29 +363,21 @@ def free_energy_large(rho_s, rho_f):
     
     #  van der Waals functional
     local_term  = w(rho_s) - w(rho_bulk)
-    local_term[rho_s > rho_bulk] = 0
-    integrand   = r_ * r_ * local_term
-    free_energy_local =  4 * np.pi * integrate.simpson(integrand, r_)
+    integrand   = local_term
+    free_energy_local =  integrate.simpson(integrand, z_)
     
-    gradient_term = 0.5 * SG_m * np.power(np.gradient(rho_s, r_), 2)
-    gradient_term[rho_s > rho_bulk] = 0
-    gradient_term[r_> edge+7] = 0
-    gradient_term[r_< edge-7] = 0
-    integrand   = r_ * r_ * gradient_term
-    free_energy_gradient =  4 * np.pi * integrate.simpson(integrand, r_)
-    
+    gradient_term = 0.5 * SG_m * np.power(np.gradient(rho_s, z_), 2)
+    integrand   = gradient_term
+    free_energy_gradient =  integrate.simpson(integrand, z_)
 
     #  unbalanced energy
-    delta_rho_bar_k = get_rFT(rho_f - rho_s, r_) * Gaussian_kspace(k_, cg_length)
-    delta_rho_bar_r = get_invrFT(delta_rho_bar_k, k_)
-    psi = (-2 * a * delta_rho_bar_r)
-    integrand       = r_ * r_ * psi * rho_s
-    integrand[r_ > edge+12] = 0
-    free_energy_u   = 4 * np.pi * integrate.simpson(integrand, r_)   
-    
-   
-    return free_energy_local*J_to_kJmol, free_energy_gradient*J_to_kJmol,\
-            free_energy_u*J_to_kJmol
+    delta_rho_bar_r = coarse_grain(rho_f - rho_s , Gaussian_in_zspace(z_, cg_length))
+    integrand       =  (-2 * a * delta_rho_bar_r) * rho_s
+    integrand[z_ > edge+12] = 0
+    free_energy_u   =  integrate.simpson(integrand, z_)   
+
+    return free_energy_local*J_to_mJm2, free_energy_gradient*J_to_mJm2,\
+            free_energy_u*J_to_mJm2
 
 
 def free_energy_small(rho_f, rho_s):
@@ -441,40 +389,32 @@ def free_energy_small(rho_f, rho_s):
     rho_s[rho_s==0] = 1e-100
     ratio           = rho_f/rho_s
     ratio[ratio==0] = 1
-    integrand       =  r_ * r_ * (rho_f * np.log(ratio) - rho_f + rho_s)
-    free_energy_id  = 4 * np.pi * kB * temperature * integrate.simpson(integrand, r_)
+    integrand       =  rho_f * np.log(ratio) - rho_f + rho_s
+    free_energy_id  =  kB * temperature * integrate.simpson(integrand, z_)
     
     # external term
-    integrand       = r_ * r_ * external_potential * rho_f
-    free_energy_ext = 4 * np.pi * integrate.simpson(integrand, r_)
+    integrand       = external_potential * rho_f
+    free_energy_ext = integrate.simpson(integrand, z_)
     
     # excess term
     
-    delta_rho_rho_slow_r = (rho_f - rho_s) * rho_s 
-    delta_rho_rho_slow_k = get_rFT(delta_rho_rho_slow_r, r_)
-    
-    pre_gamma_k          =  delta_rho_rho_slow_k * c_k
-    pre_gamma_r          =  get_invrFT(pre_gamma_k, k_)
-    
-    gamma                = pre_gamma_r * rho_s / np.power(rho_bulk, 2)
-    
-    integrand            =  r_ * r_ * (rho_f - rho_s)  * gamma
-    free_energy_exc      = -0.5 * kB * temperature * 4 * np.pi *\
-                            integrate.simpson(integrand, r_)
+    pre_gamma_z          =  coarse_grain((rho_f - rho_s) * rho_s , c_z)
+    gamma                = pre_gamma_z * rho_s/ np.power(rho_bulk, 2) 
+    integrand            =  (rho_f - rho_s)  * gamma
+    free_energy_exc      = -0.5 * kB * temperature * integrate.simpson(integrand, z_)
+
 
     #  unbalanced energy
-    delta_rho_bar_k = get_rFT(rho_f - rho_s, r_) * Gaussian_kspace(k_, cg_length)
-    delta_rho_bar_r = get_invrFT(delta_rho_bar_k, k_)
-    psi = (-2 * a * delta_rho_bar_r)
-    integrand       = -r_ * r_ * psi * rho_f
-    integrand[r_ > edge+12] = 0
-    free_energy_u   = 4 * np.pi * integrate.simpson(integrand, r_)  
+    delta_rho_bar_r = coarse_grain(rho_f - rho_s , Gaussian_in_zspace(z_, cg_length))
+    integrand       =  - (-2 * a * delta_rho_bar_r) * rho_f
+    integrand[z_ > edge+12] = 0
+    free_energy_u   =  integrate.simpson(integrand, z_)   
 
-    return free_energy_id*J_to_kJmol, free_energy_ext*J_to_kJmol, \
-            free_energy_exc*J_to_kJmol, free_energy_u*J_to_kJmol
+    return free_energy_id*J_to_mJm2, free_energy_ext*J_to_mJm2, \
+            free_energy_exc*J_to_mJm2, free_energy_u*J_to_mJm2
 
 
-header_text = '''-------------------------------------------------------------------------------
+headez_text = '''-------------------------------------------------------------------------------
 Output file from LCW-cDFT
 
 Copyright (C) 2023 Anna T. Bui
@@ -518,9 +458,9 @@ def write_out_data(filename, full_dens_final, slow_dens_final):
     F_small = F_id + F_ext + F_exc + F_u_small
     
     F_solv = F_gradient + F_local + F_id + F_ext + F_exc
-    F_solv_area = 1e3 * F_solv/(1e-3 * NA * 4 * np.pi * 1e-20 * np.power(HS_radius,2))
+    F_solv_area = F_gradient + F_local + F_id + F_ext + F_exc + F_u_small
      
-    footer_text = '''
+    footez_text = '''
 
 -------------------------------------------------------------------------------
 PARAMETERS OF SOLVENTS
@@ -547,18 +487,18 @@ EXTERNAL POTENTIAL
 FREE ENERGY OF SOLVATION    
 -------------------------------------------------------------------------------
 
-Local van der Waals [kJ/mol]            = {:.6f}
-Gradient van der Waals [kJ/mol]         = {:.6f}
-Unbalanced energy [kJ/mol]              = {:.6f}
-Combined large length scale [kJ/mol]    = {:.6f}
+Local van der Waals [mJ/m^2]            = {:.6f}
+Gradient van der Waals [mJ/m^2]         = {:.6f}
+Unbalanced energy [mJ/m^2]              = {:.6f}
+Combined large length scale [mJ/m^2]    = {:.6f}
 
-Ideal term [kJ/mol]                     = {:.6f}
-External term [kJ/mol]                  = {:.6f}
-Unbalanced term [kJ/mol]                = {:.6f}
-Excess term [kJ/mol]                    = {:.6f}
-Combined small length scale [kJ/mol]    = {:.6f}
+Ideal term [mJ/m^2]                     = {:.6f}
+External term [mJ/m^2]                  = {:.6f}
+Unbalanced term [mJ/m^2]                = {:.6f}
+Excess term [mJ/m^2]                    = {:.6f}
+Combined small length scale [mJ/m^2]    = {:.6f}
 
-Solvation free energy [kJ/mol]          = {:.6f}
+Without unbalancing potential [mJ/m^2]  = {:.6f}
 Solvation free energy per area [mJ/m^2] = {:.6f}
 
 -----------------------------------END OF OUTPUT------------------------------'''.format( \
@@ -570,8 +510,8 @@ Solvation free energy per area [mJ/m^2] = {:.6f}
         F_solv, F_solv_area)
     
     
-    np.savetxt(filename, np.c_[r_,full_dens_final,slow_dens_final], \
-                fmt='%.10e', header=header_text, footer=footer_text)
+    np.savetxt(filename, np.c_[z_,full_dens_final,slow_dens_final], \
+                fmt='%.10e', header=headez_text, footer=footez_text)
     
 
     
@@ -592,17 +532,13 @@ if __name__ == "__main__":
     rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
     SG_c, SG_m, cg_length, a, dcf_file, \
     initial_guess, alpha_full, alpha_slow, rtol, atol, \
-    k_cutoff, dr, r_min, r_max, max_FT, solute_type, \
-    HS_radius, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius \
+    k_cutoff, dr, z_min, z_max, max_FT, wall_type, \
+    HW_plane, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius \
     = load_input(path_to_input)
 
-    # prepare grid space
-    k_, c_k = get_dcf(dcf_file)
-    array_len = int(r_max/dr)
-    array_len_last = int(max_FT/dr) # for FT
-    r_ = np.linspace(r_min,r_max,array_len)
-    k_, c_k = k_[:k_cutoff], c_k[:k_cutoff]
-    
+    # prepare grid space    
+    z_, c_z = get_dcf(dcf_file)
+    dz = z_[1] - z_[0]
 
     # unit conversion
     beta = 1/(kB * temperature)
@@ -612,43 +548,42 @@ if __name__ == "__main__":
     a = a * a_convert
    
     # external potential
-    if solute_type == 'HS':
-        external_potential = HS_solute(r_, HS_radius)
-        external_potential_text = 'HS solute, R [AA] = {}'.format(HS_radius)
-        edge = HS_radius
-    elif solute_type == 'LJ':
-        external_potential = LJ_solute(r_, LJ_epsilon, LJ_sigma)
+    if wall_type == 'HW':
+        external_potential = hard_wall(z_ , HW_plane)
+        external_potential_text = 'hard wall, z [AA] = {}'.format(HW_plane)
+        edge = HW_plane
+    elif wall_type == 'LJ':
+        external_potential = LJ_solute(z_ , LJ_epsilon, LJ_sigma)
         external_potential_text = 'LJ solute, sigma [AA] = {}, \
                                 epsilon [kcal mol^-1] = {}'.format(LJ_sigma, LJ_epsilon)
         edge = LJ_sigma
-    elif solute_type == 'ATT':
+    elif wall_type == 'ATT':
         edge = ATT_radius
         external_potential_text = 'ATT solute, radius [AA] = {}, \
                                 epsilon [kcal mol^-1] = {}, \
                                 sigma [AA] = {}'.format( \
                                 ATT_radius, ATT_epsilon, ATT_sigma)
-        external_potential = ATT_solute(r_, ATT_epsilon, ATT_sigma, ATT_radius)
+        external_potential = ATT_solute(z_ , ATT_epsilon, ATT_sigma, ATT_radius)
     
     # FIRST ITERATION INITIALISATION
     if initial_guess != 'bulk':
         distance = float(initial_guess)
         d = 0.5 * np.sqrt(SG_m/SG_c) / (liquid_coex-vapor_coex)
         rho_guess = 0.5*((rho_bulk + vapor_coex)+(rho_bulk - vapor_coex) \
-                         *np.tanh((r_-edge+distance)/d))
+                         *np.tanh((z_ -edge+distance)/d))
     else:
-        rho_guess = rho_bulk
+        rho_guess = rho_bulk*np.ones(z_.shape)
     
     
     # start with an initial guess for both the full and slow density
     full_dens_guess = rho_guess * np.exp(-beta*external_potential)
-    slow_dens_guess = np.ones(r_.shape) * rho_guess
+    slow_dens_guess = np.ones(z_.shape) * rho_guess
     
     # The first cycle
-    full_dens_new   = update_full_dens(slow_dens_guess, full_dens_guess, 0.5)
-    slow_dens_guess_k = get_rFT(full_dens_new, r_) * Gaussian_kspace(k_, 1)
-    slow_dens_guess_r = get_invrFT(slow_dens_guess_k, k_)
+    full_dens_new   = update_full_dens(slow_dens_guess, full_dens_guess, 1)
+    slow_dens_guess_z = rho_guess
         
-    slow_dens_new   = update_slow_dens(full_dens_new, slow_dens_guess_r)
+    slow_dens_new   = update_slow_dens(full_dens_new, slow_dens_guess_z)
     slow_dens_trial = slow_dens_new
     slow_dens_old   = 0*slow_dens_trial
     

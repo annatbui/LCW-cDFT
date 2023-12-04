@@ -1,0 +1,34 @@
+# FLUID PROPERTIES
+
+model                       = SPC/E
+bulk_density [AA-3]         = 0.03323521
+dcf_kspace [file_path]	    = /scratch/btb32/cdft-solvation/theory/LCW-cDFT/parameters/dcf_ck_SPCE_T300.txt
+temperature [K]             = 300
+chemical_potential [kBT]    = 0
+
+# SQUARE GRADIENT
+
+c [J mol-1 nm9]		    = 1.096045
+m [kJ mol-2 cm3 AA2]        = 1178
+liquid_coex_density [AA-3]  = 0.033234
+vapor_coex_density [AA-3]   = 4.747e-7
+
+# EXTERNAL POTENTIAL
+
+solute_type                 = HS
+HS_radius [AA]              = 2.0
+#LJ_epsilon [kcal mol-1]     = 0 
+#LJ_sigma  [AA]              = 0
+
+# COARSE-GRAINING PARAMETERS
+
+a [kJ cm3 mol-2]            = 300
+lambda [angstrom]           = 0.8
+
+# OPTIONAL SETTINGS
+
+alpha_full                  = 0.05 
+alpha_slow                  = 0.15
+initial_guess               = bulk
+r_max			    = 35
+max_FT			    = 30
