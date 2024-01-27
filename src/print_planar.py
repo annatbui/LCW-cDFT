@@ -309,7 +309,7 @@ def update_full_dens(rho_slow, rho_guess, ratio):
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
     ax.set_ylim(-0.05,3.05)
-    ax.set_xlim(-20,40)
+    ax.set_xlim(-10,40)
     ax.fill_between(z_[z_< edge], -1, 4, color='gray', alpha=0.4)
     ax.set_ylabel(r'$\rho(z)/\rho_{\mathrm{u}}$')
     ax.set_xlabel(r'$z$ [$\mathrm{\AA}$]')

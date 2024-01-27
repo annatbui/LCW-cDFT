@@ -324,7 +324,6 @@ def update_full_dens(rho_slow, rho_guess, ratio):
          
         rho_old = rho_trial
 
-        
         pre_gamma_z = coarse_grain((rho_old - rho_slow) * rho_slow , c_z) 
         gamma = pre_gamma_z * rho_slow/ np.power(rho_bulk, 2)         
         
