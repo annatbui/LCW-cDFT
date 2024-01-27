@@ -67,8 +67,8 @@ NA            = 6.0221409e23     # 1/mol
 # Unit conversion
 m_convert     = 1e3*1e24/(NA*NA) # from kJ mol^-2 cm^3 AA^2 to J AA^5
 a_convert     = 1e3*1e24/(NA*NA) # from kJ cm^3 mol^-2 to # J AA^3
-d_convert     = 1.0              # from AA to AA
-gamma_convert = 1e-23            # from mJ m^-2 to J AA^-2
+c_convert     = 1e9/NA           # from J mol^-1 nm^9 to J AA^9
+d_convert     = 1e15/NA          # from J mol^-1 nm^15 to J AA^15
 kcal_to_J     = 4184
 infty         = 1e100
 J_to_kJmol    = 1e-3 * NA
@@ -121,16 +121,20 @@ def load_input(filename):
     delta_mu            = 1e-3
     liquid_coex         = 0.033234
     vapor_coex          = 4.747e-7
-    gamma               = 63.6
-    d                   = 1.54
-    cg_length = 0.85
+    SG_c                = 1.096
+    SG_d                = 0
+    SG_m_min            = 1000
+    SG_m_max            = 1400
+    SG_rho_s_min        = 0.0
+    SG_rho_s_max        = 0.03323521
+    cg_length           = 0.85
     a                   = 200
     dcf_file            = '../parameters/dcf_ck_spce_rho_u.txt'
     initial_guess       = 'bulk'
     alpha_full          = 0.05
     alpha_slow          = 0.15
-    rtol                = 1e-4
-    atol                = 1e-5 
+    rtol                = 5e-5
+    atol                = 5e-6 
     k_cutoff            = 2000
     max_FT              = 25
     r_max               = 30
@@ -154,6 +158,8 @@ def load_input(filename):
             if len(words) > 0:
                 if   words[0] == 'bulk_density':
                     rho_bulk    = float(words[-1])
+                elif words[0] == 'solute_type':
+                    solute_type = words[-1]
                 elif words[0] == 'temperature':
                     temperature = float(words[-1])
                 elif words[0] == 'chemical_potential':
@@ -162,10 +168,18 @@ def load_input(filename):
                     liquid_coex = float(words[-1])
                 elif words[0] == 'vapor_coex_density':
                     vapor_coex  = float(words[-1])
-                elif words[0] == 'surface_tension':
-                    gamma       = float(words[-1])
-                elif words[0] == 'interfacial_thickness':
-                    d           = float(words[-1])
+                elif words[0] == 'c':
+                    SG_c       = float(words[-1])
+                elif words[0] == 'd':
+                    SG_d       = float(words[-1])
+                elif words[0] == 'm_min':
+                    SG_m_min  = float(words[-1])
+                elif words[0] == 'm_max':
+                    SG_m_max  = float(words[-1])
+                elif words[0] == 'rho_s_min':
+                    SG_rho_s_min = float(words[-1])
+                elif words[0] == 'rho_s_max':
+                    SG_rho_s_max = float(words[-1])
                 elif words[0] == 'lambda':
                     cg_length = float(words[-1])
                 elif words[0] == 'a':
@@ -196,7 +210,7 @@ def load_input(filename):
                     dr = float(words[-1])                
             
     return  rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
-            gamma, d, cg_length, a, dcf_file, \
+            SG_c, SG_d, SG_m_min, SG_m_max, SG_rho_s_min, SG_rho_s_max, cg_length, a, dcf_file, \
             initial_guess, alpha_full, alpha_slow, rtol, atol, \
             k_cutoff, dr, r_min, r_max, max_FT, solute_type, \
             HS_radius, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius
@@ -232,20 +246,20 @@ def ATT_solute(r, epsilon_sf, sigma_s, Rs):
     energy[r <  Rs] = infty
     return energy * kcal_to_J / NA 
 
+
 def LJ_solute(r, epsilon, sigma):
     '''
     Lennard Jones solute
         epsilon: in kcal mol^-1 
         sigma: in angstrom
     '''
-    rc = sigma + 13
+    rc = sigma + 30
     power6 = (sigma/r)**6
     power12 = power6**2
     shift = 4*epsilon*((sigma/rc)**12 - (sigma/rc)**6)
     energy = 4*epsilon*(power12-power6) - shift
     energy[r >= rc] = 0
     return energy * kcal_to_J / NA
-
 
 
 def HS_solute(r, radius):
@@ -292,19 +306,28 @@ def w(n):
     '''
     Local grand potential density
     '''
-    energy = 2 * m * np.power(n-liquid_coex,2) * np.power(n-vapor_coex,2) \
-        / (np.power(d,2)*np.power(liquid_coex-vapor_coex,2)) - n*delta_mu
+    first_term = 0.5 * SG_c * np.power(n-liquid_coex,2) * np.power(n-vapor_coex,2)
+    second_term = 0.25* SG_d * np.power(n-liquid_coex,4) * np.power(n-vapor_coex,4)
+    second_term[n>liquid_coex]=0
+    second_term[n<vapor_coex]=0
+    third_term = - n*delta_mu
+    energy = first_term+second_term+third_term
     return energy
 
 def w_prime(n):
     '''
     Derivative of local grand potential density wrt density
     '''
-    first_prefactor = 4*m/(np.power(d,2)*np.power(liquid_coex-vapor_coex, 2))
+    first_prefactor = SG_c
     first_bracket   = np.power(n-liquid_coex,2) * (n-vapor_coex) \
                     + np.power(n-vapor_coex,2) * (n-liquid_coex)
-    second_term     = - delta_mu
-    return first_prefactor * first_bracket + second_term
+    second_prefactor = SG_d
+    second_bracket   = np.power(n-liquid_coex,4) * np.power(n-vapor_coex,3) \
+                    + np.power(n-vapor_coex,4) * np.power(n-liquid_coex,3)
+    second_bracket[n>liquid_coex]=0
+    second_bracket[n<vapor_coex]=0    
+    third_term     = - delta_mu
+    return first_prefactor*first_bracket + second_prefactor*second_bracket + third_term
 
 
 def update_full_dens(rho_slow, rho_guess, ratio):
@@ -316,19 +339,12 @@ def update_full_dens(rho_slow, rho_guess, ratio):
     rho_trial = rho_guess
     rho_old   = np.zeros(r_.shape)
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-    ax.set_ylim(-0.05,3.05)
-    ax.set_ylabel(r'$\rho(r)/\rho_{\mathrm{u}}$')
-    ax.set_xlabel(r'$r$ [$\mathrm{\AA}$]')
-    place(ax)
 
     # iterative loop
     while np.allclose(rho_trial,rho_old, rtol, atol) is False:
-        ax.plot(r_, rho_trial/rho_bulk)
-        display.display(fig)
-        display.clear_output(wait=True)
-         
+ 
         rho_old = rho_trial
+
         
         delta_rho_rho_slow_r = (rho_old - rho_slow) * rho_slow 
         delta_rho_rho_slow_k = get_rFT(delta_rho_rho_slow_r, r_)
@@ -339,7 +355,7 @@ def update_full_dens(rho_slow, rho_guess, ratio):
         gamma = pre_gamma_r * rho_slow/ np.power(rho_bulk, 2)        
         
         # compute RHS
-        rho_new = rho_slow * np.exp(-beta*HS_solute(r_, HS_radius) + ratio * gamma)
+        rho_new = rho_slow * np.exp(-beta*external_potential + ratio * gamma)
         
         # update to new density
         rho_trial = rho_old * (1-alpha_full) + rho_new * alpha_full
@@ -355,66 +371,72 @@ def update_slow_dens(rho_full, rho_guess):
     full density, guess from previous iteration
     '''
     
+    edge_solute_index = np.argmax(rho_full > rho_guess)
+    #edge_solute_index = np.argmax(rho_full > rho_guess)
+    
     # Coarse grain the full density
     rho_full_bar_k = get_rFT(rho_full, r_) * Gaussian_kspace(k_, cg_length)
     rho_full_bar_r = get_invrFT(rho_full_bar_k, k_)
     
-    
+
     # initial guess
     rho_trial = rho_guess
     rho_old = np.zeros(r_.shape)
-
-    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-    ax.set_ylim(-0.05,3.05)
-    ax.set_ylabel(r'$\rho_{\mathrm{s}}(r)/\rho_{\mathrm{u}}$')
-    ax.set_xlabel(r'$r$ [$\mathrm{\AA}$]')
     
-    place(ax)   
     # iterative loop
 
     while np.allclose(rho_trial,rho_old, rtol, atol) is False:
         
-        ax.plot(r_, rho_trial/rho_bulk)
-        display.display(fig)
-        display.clear_output(wait=True)
-         
+ 
         rho_old = rho_trial
-        
+
+
+        rho_s_star = rho_old[edge_solute_index]
+        SG_m = SG_m_min + (SG_m_max - SG_m_min) * (rho_s_star - SG_rho_s_min) /(SG_rho_s_max - SG_rho_s_min)
+        #if SG_m < SG_m_min:
+         #   SG_m = SG_m_min
            
         rho_slow_bar_k = get_rFT(rho_old, r_) * Gaussian_kspace(k_, cg_length)
         rho_slow_bar_r = get_invrFT(rho_slow_bar_k, k_)        
         
-        first_term = a*np.power(cg_length,2)*rho_full_bar_r/m
-        second_term = 0.5 * w_prime(rho_old)*np.power(cg_length,2)/ m
-        third_term = (1 -(a*np.power(cg_length,2)/m ))*rho_slow_bar_r
+        first_term = a*np.power(cg_length,2)*rho_full_bar_r/SG_m
+        second_term = 0.5 * w_prime(rho_old)*np.power(cg_length,2)/ SG_m
+        third_term = (1 -(a*np.power(cg_length,2)/SG_m ))*rho_slow_bar_r
         
         rho_new = first_term - second_term + third_term
+        
+        
+        rho_new[rho_new < vapor_coex] = vapor_coex
+        rho_new[rho_new > rho_bulk] = rho_bulk
+        rho_new[r_> edge+15] = rho_bulk
         
          # Update to new density
         rho_trial = rho_old * (1 - alpha_slow) + rho_new * alpha_slow
       
-    rho_final = rho_trial    
+    rho_final = rho_trial  
+    SG_m_final = SG_m 
     
     # return new slowly varying density
-    return rho_final
+    return rho_final, SG_m_final
 
 
-def free_energy_large(rho_s, rho_f):
+def free_energy_large(rho_s, rho_f, SG_m):
     '''
     Returns Free energy from van der Waals functional 
     + unbalanced energy between two densities
     '''
     
     #  van der Waals functional
-    local_term  = w(rho_s) - w(rho_bulk)
+    local_term  = w(rho_s) - w(rho_s*0+rho_bulk)
     local_term[rho_s > rho_bulk] = 0
     integrand   = r_ * r_ * local_term
     free_energy_local =  4 * np.pi * integrate.simpson(integrand, r_)
     
-    gradient_term = 0.5 * m * np.power(np.gradient(rho_s, r_), 2)
-    gradient_term[rho_s > rho_bulk] = 0
-    gradient_term[r_> edge+7] = 0
-    gradient_term[r_< edge-7] = 0
+    gradient_term = 0.5 * SG_m * np.power(np.gradient(rho_s, r_), 2)
+    gradient_term[rho_s > liquid_coex] = 0
+    gradient_term[rho_s < vapor_coex] = 0
+    gradient_term[r_> edge+5] = 0
+    gradient_term[r_< edge-5] = 0
     integrand   = r_ * r_ * gradient_term
     free_energy_gradient =  4 * np.pi * integrate.simpson(integrand, r_)
     
@@ -423,12 +445,14 @@ def free_energy_large(rho_s, rho_f):
     delta_rho_bar_k = get_rFT(rho_f - rho_s, r_) * Gaussian_kspace(k_, cg_length)
     delta_rho_bar_r = get_invrFT(delta_rho_bar_k, k_)
     psi = (-2 * a * delta_rho_bar_r)
+    psi = psi-psi[-1]
     integrand       = r_ * r_ * psi * rho_s
     integrand[r_ > edge+12] = 0
     free_energy_u   = 4 * np.pi * integrate.simpson(integrand, r_)   
     
    
-    return free_energy_local*J_to_kJmol, free_energy_gradient*J_to_kJmol, free_energy_u*J_to_kJmol
+    return free_energy_local*J_to_kJmol, free_energy_gradient*J_to_kJmol,\
+            free_energy_u*J_to_kJmol
 
 
 def free_energy_small(rho_f, rho_s):
@@ -437,9 +461,10 @@ def free_energy_small(rho_f, rho_s):
     '''
     
     # ideal term
+    rho_s[r_ < edge - 5] = 0
     rho_s[rho_s==0] = 1e-100
     ratio           = rho_f/rho_s
-    ratio[ratio==0] = 1 # prevent divergence of log term
+    ratio[ratio==0] = 1
     integrand       =  r_ * r_ * (rho_f * np.log(ratio) - rho_f + rho_s)
     free_energy_id  = 4 * np.pi * kB * temperature * integrate.simpson(integrand, r_)
     
@@ -458,19 +483,29 @@ def free_energy_small(rho_f, rho_s):
     gamma                = pre_gamma_r * rho_s / np.power(rho_bulk, 2)
     
     integrand            =  r_ * r_ * (rho_f - rho_s)  * gamma
-    free_energy_exc      = -0.5 * kB * temperature * 4 * np.pi * \
+    free_energy_exc      = -0.5 * kB * temperature * 4 * np.pi *\
                             integrate.simpson(integrand, r_)
-
 
     #  unbalanced energy
     delta_rho_bar_k = get_rFT(rho_f - rho_s, r_) * Gaussian_kspace(k_, cg_length)
     delta_rho_bar_r = get_invrFT(delta_rho_bar_k, k_)
     psi = (-2 * a * delta_rho_bar_r)
-    integrand       = -r_ * r_ * psi * rho_f
-    integrand[r_ > edge+12] = 0
-    free_energy_u   = 4 * np.pi * integrate.simpson(integrand, r_)   
-        
-    return free_energy_id*J_to_kJmol, free_energy_ext*J_to_kJmol, free_energy_exc*J_to_kJmol, free_energy_u*J_to_kJmol
+    psi = psi-psi[-1]
+    
+
+    rho_bar_k = get_rFT(rho_f, r_) * Gaussian_kspace(k_, cg_length)
+    rho_bar_r = get_invrFT(rho_bar_k, k_)    
+    
+    integrand1       = r_ * r_ * psi * rho_bar_r 
+    integrand1[r_ > edge+12] = 0
+    integrand2       = r_ * r_ * psi * rho_f
+    integrand2[r_ > edge+12] = 0
+    
+    free_energy_u_rho  = 4 * np.pi * integrate.simpson(integrand2, r_) 
+    free_energy_u_rho_bar   = 4 * np.pi * integrate.simpson(integrand1, r_)  
+    return free_energy_id*J_to_kJmol, free_energy_ext*J_to_kJmol, \
+            free_energy_exc*J_to_kJmol, free_energy_u_rho*J_to_kJmol, \
+            free_energy_u_rho_bar*J_to_kJmol   
 
 
 header_text = '''-------------------------------------------------------------------------------
@@ -505,20 +540,26 @@ DENSITY PROFILES
 r [AA]   |  full_density [AA^-3]  |  slow_density [AA^-3] 
 '''
 
-def write_out_data(filename, full_dens_final, slow_dens_final):
+def write_out_data(filename, full_dens_final, slow_dens_final, SG_m):
     '''
     Write out data
     '''
 
-    F_local, F_gradient, F_u_large = free_energy_large(slow_dens_final, full_dens_final)
-    F_id, F_ext, F_exc, F_u_small = free_energy_small(full_dens_final, slow_dens_final)
+    F_local, F_gradient, F_u_large = free_energy_large(slow_dens_final, full_dens_final, SG_m)
+    F_id, F_ext, F_exc, F_u_small, F_u_small_bar = free_energy_small(full_dens_final, slow_dens_final)
     
-    F_large = F_local + F_gradient + F_u_large
-    F_small = F_id + F_ext + F_exc + F_u_small
+    F_large = F_local + F_gradient 
+    F_small = F_id + F_ext + F_exc 
     
     F_solv = F_gradient + F_local + F_id + F_ext + F_exc
-    F_solv_area = 1e3 * F_solv/(1e-3 * NA * 4 * np.pi * 1e-20 * np.power(HS_radius,2))
     
+    per_area = 1e3 /(1e-3 * NA * 4 * np.pi * 1e-20 * np.power(edge,2))
+    
+    F_local_area = F_local * per_area
+    F_gradient_area = F_gradient * per_area
+    
+    F_solv_area = F_solv * per_area
+     
     footer_text = '''
 
 -------------------------------------------------------------------------------
@@ -530,8 +571,10 @@ temperature [K]                         = {:.1f}
 
 liquid_coex_density [AA^-3]             = {:.8f}
 gas_coex_density [AA^-3]                = {:.8f}
-gamma [mJ m^-2]                         = {:.2f}
-d [AA]                                  = {:.2f}
+c [J mol^-1 nm^9]                       = {:.5f}                               
+d [J mol^-1 nm^15]                      = {:.5f}    
+m_min [kJ mol^-2 cm^3 AA^2]             = {:.2f}
+m_max [kJ mol^-2 cm^3 AA^2]             = {:.2f}
 m [kJ mol^-2 cm^3 AA^2]                 = {:.2f}
 
 a [kJ cm^3 mol^-2]                      = {:.2f}
@@ -549,24 +592,30 @@ FREE ENERGY OF SOLVATION
 
 Local van der Waals [kJ/mol]            = {:.6f}
 Gradient van der Waals [kJ/mol]         = {:.6f}
-Unbalanced energy [kJ/mol]              = {:.6f}
+Local van der Waals per area [mJ/m^2]   = {:.6f}
+Gradient van der Waals per area [mJ/m^2]= {:.6f}
 Combined large length scale [kJ/mol]    = {:.6f}
 
 Ideal term [kJ/mol]                     = {:.6f}
 External term [kJ/mol]                  = {:.6f}
-Small unbalanced term [kJ/mol]          = {:.6f}
 Excess term [kJ/mol]                    = {:.6f}
 Combined small length scale [kJ/mol]    = {:.6f}
+
+Unbalanced rho energy [kJ/mol]          = {:.6f}
+Unbalanced rho_bar energy [kJ/mol]      = {:.6f}
+Unbalanced rho_s energy [kJ/mol]        = {:.6f}
 
 Solvation free energy [kJ/mol]          = {:.6f}
 Solvation free energy per area [mJ/m^2] = {:.6f}
 
 -----------------------------------END OF OUTPUT------------------------------'''.format( \
         rho_bulk, temperature, \
-        liquid_coex, vapor_coex, gamma/gamma_convert, d, m/m_convert, \
+        liquid_coex, vapor_coex, SG_c/c_convert, SG_d/d_convert, \
+        SG_m_min/m_convert, SG_m_max/m_convert, SG_m/m_convert, \
         a/a_convert, cg_length, external_potential_text, \
-        F_local, F_gradient, F_u_large, F_large, \
-        F_id, F_ext, F_u_small, F_exc, F_small, \
+        F_local, F_gradient, F_local_area, F_gradient_area, F_large, \
+        F_id, F_ext, F_exc, F_small, \
+        F_u_small, F_u_small_bar, F_u_large, \
         F_solv, F_solv_area)
     
     
@@ -590,7 +639,7 @@ if __name__ == "__main__":
     
     # essenial inputs
     rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
-    gamma, d, cg_length, a, dcf_file, \
+    SG_c, SG_d,  SG_m_min, SG_m_max, SG_rho_s_min, SG_rho_s_max, cg_length, a, dcf_file, \
     initial_guess, alpha_full, alpha_slow, rtol, atol, \
     k_cutoff, dr, r_min, r_max, max_FT, solute_type, \
     HS_radius, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius \
@@ -607,11 +656,12 @@ if __name__ == "__main__":
     # unit conversion
     beta = 1/(kB * temperature)
     delta_mu = delta_mu * kB * temperature
-    gamma = gamma * gamma_convert
-    d = d * d_convert
+    SG_c = SG_c * c_convert
+    SG_m_min = SG_m_min * m_convert
+    SG_m_max = SG_m_max * m_convert
+    SG_d = SG_d * d_convert
     a = a * a_convert
-    m = 3 * d * gamma / np.power(liquid_coex-vapor_coex,2)
-
+   
     # external potential
     if solute_type == 'HS':
         external_potential = HS_solute(r_, HS_radius)
@@ -620,7 +670,7 @@ if __name__ == "__main__":
     elif solute_type == 'LJ':
         external_potential = LJ_solute(r_, LJ_epsilon, LJ_sigma)
         external_potential_text = 'LJ solute, sigma [AA] = {}, \
-                                epsilon [kcal mol^-1] = {}'.format(LJ_sigma, LJ_epsilon)
+                                \n epsilon [kcal mol^-1] = {}'.format(LJ_sigma, LJ_epsilon)
         edge = LJ_sigma
     elif solute_type == 'ATT':
         edge = ATT_radius
@@ -633,8 +683,9 @@ if __name__ == "__main__":
     # FIRST ITERATION INITIALISATION
     if initial_guess != 'bulk':
         distance = float(initial_guess)
-        rho_guess = 0.5*((rho_bulk + 0)+(rho_bulk - 0) \
-                         *np.tanh((r_-edge+distance)/d))
+        d = 0.5* np.sqrt(SG_m_min/SG_c) / (liquid_coex-vapor_coex)
+        rho_guess = 0.5*((rho_bulk + vapor_coex)+(rho_bulk - vapor_coex) \
+                         *np.tanh((r_-edge+distance)/(2.5*d)))
     else:
         rho_guess = rho_bulk
     
@@ -645,10 +696,10 @@ if __name__ == "__main__":
     
     # The first cycle
     full_dens_new   = update_full_dens(slow_dens_guess, full_dens_guess, 0.5)
-    slow_dens_guess_k = get_rFT(full_dens_new, r_) * Gaussian_kspace(k_, 1)
-    slow_dens_guess_r = get_invrFT(slow_dens_guess_k, k_)
+    slow_dens_guess_k = get_rFT(full_dens_new, r_) * Gaussian_kspace(k_, 1.5)
+    slow_dens_guess_r = rho_guess #get_invrFT(slow_dens_guess_k, k_)
         
-    slow_dens_new   = update_slow_dens(full_dens_new, slow_dens_guess_r)
+    slow_dens_new, SG_m_new   = update_slow_dens(full_dens_new, slow_dens_guess_r)
     slow_dens_trial = slow_dens_new
     slow_dens_old   = 0*slow_dens_trial
     
@@ -660,15 +711,16 @@ if __name__ == "__main__":
         # Iterative loop: update full density if not converged
         full_dens_new = update_full_dens(slow_dens_old, full_dens_new, 1)
         # Iterative loop: update slow density if not converged
-        slow_dens_new = update_slow_dens(full_dens_new, slow_dens_new)
+        slow_dens_new, SG_m_new = update_slow_dens(full_dens_new, slow_dens_new)
         slow_dens_trial = slow_dens_new
     
     # final converged densities
     slow_dens_final = slow_dens_new
+    SG_m_final = SG_m_new
     full_dens_final = full_dens_new
     
     # write output
-    write_out_data(path_to_output, full_dens_final, slow_dens_final)
+    write_out_data(path_to_output, full_dens_final, slow_dens_final, SG_m_final)
     
 
     

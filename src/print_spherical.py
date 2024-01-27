@@ -46,10 +46,18 @@
         
 -------------------------------------------------------------------------------
 """
+from IPython import display
 import argparse
 import numpy as np
 from scipy import integrate
+import matplotlib.pyplot as plt
 
+params = {"axes.labelsize": 14,
+          "axes.titlesize": 25,}
+plt.rcParams["axes.linewidth"] = 1
+plt.rcParams['mathtext.bf'] = 'STIXGeneral:italic:bold'
+plt.rcParams['figure.dpi'] = 100
+plt.rcParams.update(params)
 
 
 # Scientific constants
@@ -93,6 +101,14 @@ def get_arguments():
     
     return parser.parse_args()
 
+def place(ax):
+    '''
+    Make axis looks pretty
+    '''
+    ax.tick_params(direction="in", which="minor", length=3)
+    ax.tick_params(direction="in", which="major", length=5, labelsize=13)
+    ax.grid(which="major", ls="dashed", dashes=(1, 3), lw=1, zorder=0)
+    
     
 def load_input(filename):
     '''
@@ -323,10 +339,19 @@ def update_full_dens(rho_slow, rho_guess, ratio):
     rho_trial = rho_guess
     rho_old   = np.zeros(r_.shape)
 
+    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    ax.set_ylim(-0.05,3.05)
+    ax.set_ylabel(r'$\rho(z)/\rho_{\mathrm{u}}$')
+    ax.set_xlabel(r'$z$ [$\mathrm{\AA}$]')
+    place(ax)
 
     # iterative loop
     while np.allclose(rho_trial,rho_old, rtol, atol) is False:
- 
+
+        ax.plot(r_ , rho_trial/rho_bulk)
+        display.display(fig)
+        display.clear_output(wait=True)
+          
         rho_old = rho_trial
 
         
@@ -366,11 +391,21 @@ def update_slow_dens(rho_full, rho_guess):
     # initial guess
     rho_trial = rho_guess
     rho_old = np.zeros(r_.shape)
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    ax.set_ylim(-0.05,3.05)
+    ax.set_ylabel(r'$\rho_{\mathrm{s}}(z)/\rho_{\mathrm{u}}$')
+    ax.set_xlabel(r'$z$ [$\mathrm{\AA}$]')
+
+    place(ax)  
     
     # iterative loop
 
     while np.allclose(rho_trial,rho_old, rtol, atol) is False:
         
+        ax.plot(r_ , rho_trial/rho_bulk)
+        display.display(fig)
+        display.clear_output(wait=True)
  
         rho_old = rho_trial
 

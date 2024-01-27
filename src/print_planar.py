@@ -68,6 +68,7 @@ NA            = 6.0221409e23     # 1/mol
 m_convert     = 1e3*1e24/(NA*NA) # from kJ mol^-2 cm^3 AA^2 to J AA^5
 a_convert     = 1e3*1e24/(NA*NA) # from kJ cm^3 mol^-2 to # J AA^3
 c_convert     = 1e9/NA           # from J mol^-1 nm^9 to J AA^9
+d_convert     = 1e15/NA           # from J mol^-1 nm^15 to J AA^15
 kcal_to_J     = 4184
 infty         = 1e100
 J_to_kJmol    = 1e-3 * NA
@@ -121,6 +122,7 @@ def load_input(filename):
     liquid_coex         = 0.033234
     vapor_coex          = 4.747e-7
     SG_c                = 1.096
+    SG_d                = 0
     SG_m                = 965
     cg_length           = 0.85
     a                   = 200
@@ -128,8 +130,8 @@ def load_input(filename):
     initial_guess       = 'bulk'
     alpha_full          = 0.05
     alpha_slow          = 0.15
-    rtol                = 5e-5
-    atol                = 5e-6 
+    rtol                = 7e-5
+    atol                = 7e-6 
     k_cutoff            = 2000
     max_FT              = 25
     z_max               = 30
@@ -163,6 +165,8 @@ def load_input(filename):
                     vapor_coex  = float(words[-1])
                 elif words[0] == 'c':
                     SG_c       = float(words[-1])
+                elif words[0] == 'd':
+                    SG_d       = float(words[-1])
                 elif words[0] == 'm':
                     SG_m       = float(words[-1])
                 elif words[0] == 'lambda':
@@ -195,7 +199,7 @@ def load_input(filename):
                     dr = float(words[-1])                
             
     return  rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
-            SG_c, SG_m, cg_length, a, dcf_file, \
+            SG_c, SG_d, SG_m, cg_length, a, dcf_file, \
             initial_guess, alpha_full, alpha_slow, rtol, atol, \
             k_cutoff, dr, z_min, z_max, max_FT, wall_type, \
             HW_plane, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius
@@ -215,7 +219,7 @@ def Gaussian_in_zspace(z, sigma):
 def coarse_grain(function, weight):
     
     result = dz*np.convolve(function, weight, 'same')
-    cut = int(len(result)/4)
+    cut = int(len(result)/5)
     result[:cut] = result[cut]
     result[-cut:] = result[-cut]
     
@@ -270,8 +274,12 @@ def w(n):
     '''
     Local grand potential density
     '''
-    energy = 0.5 * SG_c * np.power(n-liquid_coex,2) * np.power(n-vapor_coex,2) \
-         - n*delta_mu
+    first_term = 0.5 * SG_c * np.power(n-liquid_coex,2) * np.power(n-vapor_coex,2)
+    second_term = 0.25* SG_d * np.power(n-liquid_coex,4) * np.power(n-vapor_coex,4)
+    second_term[n>liquid_coex]=0
+    second_term[n<vapor_coex]=0
+    third_term = - n*delta_mu
+    energy = first_term+second_term+third_term
     return energy
 
 def w_prime(n):
@@ -281,8 +289,13 @@ def w_prime(n):
     first_prefactor = SG_c
     first_bracket   = np.power(n-liquid_coex,2) * (n-vapor_coex) \
                     + np.power(n-vapor_coex,2) * (n-liquid_coex)
-    second_term     = - delta_mu
-    return first_prefactor * first_bracket + second_term
+    second_prefactor = SG_d
+    second_bracket   = np.power(n-liquid_coex,4) * np.power(n-vapor_coex,3) \
+                    + np.power(n-vapor_coex,4) * np.power(n-liquid_coex,3)
+    second_bracket[n>liquid_coex]=0
+    second_bracket[n<vapor_coex]=0    
+    third_term     = - delta_mu
+    return first_prefactor*first_bracket + second_prefactor*second_bracket + third_term
 
 
 def update_full_dens(rho_slow, rho_guess, ratio):
@@ -293,7 +306,6 @@ def update_full_dens(rho_slow, rho_guess, ratio):
     # initial guess
     rho_trial = rho_guess
     rho_old   = np.zeros(z_ .shape)
- 
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
     ax.set_ylim(-0.05,3.05)
@@ -305,10 +317,12 @@ def update_full_dens(rho_slow, rho_guess, ratio):
 
     # iterative loop
     while np.allclose(rho_trial,rho_old, rtol, atol) is False:
+        
+        
         ax.plot(z_ , rho_trial/rho_bulk)
         display.display(fig)
         display.clear_output(wait=True)
-         
+        
         rho_old = rho_trial
 
         
@@ -347,15 +361,12 @@ def update_slow_dens(rho_full, rho_guess):
     ax.set_ylabel(r'$\rho_{\mathrm{s}}(z)/\rho_{\mathrm{u}}$')
     ax.set_xlabel(r'$z$ [$\mathrm{\AA}$]')
     
-    place(ax)   
+    
     # iterative loop
 
     while np.allclose(rho_trial,rho_old, rtol, atol) is False:
         
-        ax.plot(z_ , rho_trial/rho_bulk)
-        display.display(fig)
-        display.clear_output(wait=True)
- 
+
         rho_old = rho_trial
         
            
@@ -383,18 +394,20 @@ def free_energy_large(rho_s, rho_f):
     '''
     
     #  van der Waals functional
-    local_term  = w(rho_s) - w(rho_bulk)
+    local_term  = w(rho_s) - w(rho_s*0+rho_bulk)
     integrand   = local_term
+    integrand[z_<-10] = 0
     free_energy_local =  integrate.simpson(integrand, z_)
     
     gradient_term = 0.5 * SG_m * np.power(np.gradient(rho_s, z_), 2)
     integrand   = gradient_term
+    integrand[z_<-10] = 0
     free_energy_gradient =  integrate.simpson(integrand, z_)
 
     #  unbalanced energy
     delta_rho_bar_r = coarse_grain(rho_f - rho_s , Gaussian_in_zspace(z_, cg_length))
     integrand       =  (-2 * a * delta_rho_bar_r) * rho_s
-    integrand[z_ > edge+12] = 0
+    #integrand[z_ > edge+12] = 0
     free_energy_u   =  integrate.simpson(integrand, z_)   
 
     return free_energy_local*J_to_mJm2, free_energy_gradient*J_to_mJm2,\
@@ -411,10 +424,12 @@ def free_energy_small(rho_f, rho_s):
     ratio           = rho_f/rho_s
     ratio[ratio==0] = 1
     integrand       =  rho_f * np.log(ratio) - rho_f + rho_s
+    integrand[z_<-10] = 0
     free_energy_id  =  kB * temperature * integrate.simpson(integrand, z_)
     
     # external term
     integrand       = external_potential * rho_f
+    integrand[z_<-10] = 0
     free_energy_ext = integrate.simpson(integrand, z_)
     
     # excess term
@@ -422,13 +437,14 @@ def free_energy_small(rho_f, rho_s):
     pre_gamma_z          =  coarse_grain((rho_f - rho_s) * rho_s , c_z)
     gamma                = pre_gamma_z * rho_s/ np.power(rho_bulk, 2) 
     integrand            =  (rho_f - rho_s)  * gamma
+    integrand[z_<-10] = 0
     free_energy_exc      = -0.5 * kB * temperature * integrate.simpson(integrand, z_)
 
 
     #  unbalanced energy
-    delta_rho_bar_z = coarse_grain(rho_f - rho_s , Gaussian_in_zspace(z_, cg_length))
-    integrand       =  - (-2 * a * delta_rho_bar_z) * rho_f
-    integrand[z_ > edge+12] = 0
+    delta_rho_bar_r = coarse_grain(rho_f - rho_s , Gaussian_in_zspace(z_, cg_length))
+    integrand       =  - (-2 * a * delta_rho_bar_r) * rho_f
+    #integrand[z_ > edge+12] = 0
     free_energy_u   =  integrate.simpson(integrand, z_)   
 
     return free_energy_id*J_to_mJm2, free_energy_ext*J_to_mJm2, \
@@ -551,7 +567,7 @@ if __name__ == "__main__":
     
     # essenial inputs
     rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
-    SG_c, SG_m, cg_length, a, dcf_file, \
+    SG_c, SG_d, SG_m, cg_length, a, dcf_file, \
     initial_guess, alpha_full, alpha_slow, rtol, atol, \
     k_cutoff, dr, z_min, z_max, max_FT, wall_type, \
     HW_plane, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius \
@@ -566,6 +582,7 @@ if __name__ == "__main__":
     delta_mu = delta_mu * kB * temperature
     SG_c = SG_c * c_convert
     SG_m = SG_m * m_convert
+    SG_d = SG_d * d_convert
     a = a * a_convert
    
     # external potential
@@ -589,7 +606,7 @@ if __name__ == "__main__":
     # FIRST ITERATION INITIALISATION
     if initial_guess != 'bulk':
         distance = float(initial_guess)
-        d = 2*0.5 * np.sqrt(SG_m/SG_c) / (liquid_coex-vapor_coex)
+        d = 0.5 * np.sqrt(SG_m/SG_c) / (liquid_coex-vapor_coex)
         rho_guess = 0.5*((rho_bulk + vapor_coex)+(rho_bulk - vapor_coex) \
                          *np.tanh((z_ -edge+distance)/d))
     else:
