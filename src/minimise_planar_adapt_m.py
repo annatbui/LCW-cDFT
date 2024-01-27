@@ -123,7 +123,10 @@ def load_input(filename):
     vapor_coex          = 4.747e-7
     SG_c                = 1.096
     SG_d                = 0
-    SG_m                = 965
+    SG_m_min            = 1000
+    SG_m_max            = 1400
+    SG_rho_s_min        = 0.0
+    SG_rho_s_max        = 0.03323521
     cg_length           = 0.85
     a                   = 200
     dcf_file            = '../parameters/dcf_cz_SPCE_rho_u_T300.txt'
@@ -167,8 +170,14 @@ def load_input(filename):
                     SG_c       = float(words[-1])
                 elif words[0] == 'd':
                     SG_d       = float(words[-1])
-                elif words[0] == 'm':
-                    SG_m       = float(words[-1])
+                elif words[0] == 'm_min':
+                    SG_m_min  = float(words[-1])
+                elif words[0] == 'm_max':
+                    SG_m_max  = float(words[-1])
+                elif words[0] == 'rho_s_min':
+                    SG_rho_s_min = float(words[-1])
+                elif words[0] == 'rho_s_max':
+                    SG_rho_s_max = float(words[-1])
                 elif words[0] == 'lambda':
                     cg_length = float(words[-1])
                 elif words[0] == 'a':
@@ -199,7 +208,7 @@ def load_input(filename):
                     dr = float(words[-1])                
             
     return  rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
-            SG_c, SG_d, SG_m, cg_length, a, dcf_file, \
+            SG_c, SG_d, SG_m_min, SG_m_max, SG_rho_s_min, SG_rho_s_max, cg_length, a, dcf_file, \
             initial_guess, alpha_full, alpha_slow, rtol, atol, \
             k_cutoff, dr, z_min, z_max, max_FT, wall_type, \
             HW_plane, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius
@@ -219,7 +228,7 @@ def Gaussian_in_zspace(z, sigma):
 def coarse_grain(function, weight):
     
     result = dz*np.convolve(function, weight, 'same')
-    cut = int(len(result)/4)
+    cut = int(len(result)/5)
     result[:cut] = result[cut]
     result[-cut:] = result[-cut]
     
@@ -267,7 +276,7 @@ def hard_wall(z, wall):
     '''
     energy = z*0 + infty
     energy[z >= wall] = 0
-    return energy*0
+    return energy  
 
 
 def w(n):
@@ -296,7 +305,6 @@ def w_prime(n):
     second_bracket[n<vapor_coex]=0    
     third_term     = - delta_mu
     return first_prefactor*first_bracket + second_prefactor*second_bracket + third_term
-
 
 
 def update_full_dens(rho_slow, rho_guess, ratio):
@@ -334,6 +342,7 @@ def update_slow_dens(rho_full, rho_guess):
     Compute slow density according to vdW with unbalanced force from given 
     full density, guess from previous iteration
     '''
+    edge_wall_index = np.argmax(z_>HW_plane)
     
     # Coarse grain the full density
     rho_full_bar_z = coarse_grain(rho_full , Gaussian_in_zspace(z_, cg_length)) 
@@ -351,6 +360,8 @@ def update_slow_dens(rho_full, rho_guess):
 
         rho_old = rho_trial
         
+        rho_s_star = rho_old[edge_wall_index]
+        SG_m = SG_m_min + (SG_m_max - SG_m_min) * (rho_s_star - SG_rho_s_min) /(SG_rho_s_max - SG_rho_s_min)
            
         rho_slow_bar_z = coarse_grain(rho_old , Gaussian_in_zspace(z_, cg_length))     
         
@@ -364,12 +375,13 @@ def update_slow_dens(rho_full, rho_guess):
         rho_trial = rho_old * (1 - alpha_slow) + rho_new * alpha_slow
       
     rho_final = rho_trial   
+    SG_m_final = SG_m 
     
     # return new slowly varying density
-    return rho_final
+    return rho_final, SG_m_final
 
 
-def free_energy_large(rho_s, rho_f):
+def free_energy_large(rho_s, rho_f, SG_m):
     '''
     Returns Free energy from van der Waals functional 
     + unbalanced energy between two densities
@@ -378,10 +390,12 @@ def free_energy_large(rho_s, rho_f):
     #  van der Waals functional
     local_term  = w(rho_s) - w(rho_s*0+rho_bulk)
     integrand   = local_term
+    integrand[z_<-10] = 0
     free_energy_local =  integrate.simpson(integrand, z_)
     
     gradient_term = 0.5 * SG_m * np.power(np.gradient(rho_s, z_), 2)
     integrand   = gradient_term
+    integrand[z_<-10] = 0
     free_energy_gradient =  integrate.simpson(integrand, z_)
 
     #  unbalanced energy
@@ -404,10 +418,12 @@ def free_energy_small(rho_f, rho_s):
     ratio           = rho_f/rho_s
     ratio[ratio==0] = 1
     integrand       =  rho_f * np.log(ratio) - rho_f + rho_s
+    integrand[z_<-10] = 0
     free_energy_id  =  kB * temperature * integrate.simpson(integrand, z_)
     
     # external term
     integrand       = external_potential * rho_f
+    integrand[z_<-10] = 0
     free_energy_ext = integrate.simpson(integrand, z_)
     
     # excess term
@@ -415,6 +431,7 @@ def free_energy_small(rho_f, rho_s):
     pre_gamma_z          =  coarse_grain((rho_f - rho_s) * rho_s , c_z)
     gamma                = pre_gamma_z * rho_s/ np.power(rho_bulk, 2) 
     integrand            =  (rho_f - rho_s)  * gamma
+    integrand[z_<-10] = 0
     free_energy_exc      = -0.5 * kB * temperature * integrate.simpson(integrand, z_)
 
 
@@ -460,12 +477,12 @@ DENSITY PROFILES
 r [AA]   |  full_density [AA^-3]  |  slow_density [AA^-3] 
 '''
 
-def write_out_data(filename, full_dens_final, slow_dens_final):
+def write_out_data(filename, full_dens_final, slow_dens_final, SG_m):
     '''
     Write out data
     '''
 
-    F_local, F_gradient, F_u_large = free_energy_large(slow_dens_final, full_dens_final)
+    F_local, F_gradient, F_u_large = free_energy_large(slow_dens_final, full_dens_final, SG_m)
     F_id, F_ext, F_exc, F_u_small = free_energy_small(full_dens_final, slow_dens_final)
     
     F_large = F_local + F_gradient + F_u_large
@@ -486,6 +503,9 @@ temperature [K]                         = {:.1f}
 liquid_coex_density [AA^-3]             = {:.8f}
 gas_coex_density [AA^-3]                = {:.8f}
 c [J mol^-1 nm^9]                       = {:.5f}                               
+d [J mol^-1 nm^15]                      = {:.5f}    
+m_min [kJ mol^-2 cm^3 AA^2]             = {:.2f}
+m_max [kJ mol^-2 cm^3 AA^2]             = {:.2f}
 m [kJ mol^-2 cm^3 AA^2]                 = {:.2f}
 
 a [kJ cm^3 mol^-2]                      = {:.2f}
@@ -501,23 +521,24 @@ EXTERNAL POTENTIAL
 FREE ENERGY OF SOLVATION    
 -------------------------------------------------------------------------------
 
-Local van der Waals [mJ/m^2]            = {:.6f}
-Gradient van der Waals [mJ/m^2]         = {:.6f}
-Unbalanced energy [mJ/m^2]              = {:.6f}
-Combined large length scale [mJ/m^2]    = {:.6f}
+Local van der Waals [mJ/m^2]            = {:.10f}
+Gradient van der Waals [mJ/m^2]         = {:.10f}
+Unbalanced energy [mJ/m^2]              = {:.10f}
+Combined large length scale [mJ/m^2]    = {:.10f}
 
-Ideal term [mJ/m^2]                     = {:.6f}
-External term [mJ/m^2]                  = {:.6f}
-Unbalanced term [mJ/m^2]                = {:.6f}
-Excess term [mJ/m^2]                    = {:.6f}
-Combined small length scale [mJ/m^2]    = {:.6f}
+Ideal term [mJ/m^2]                     = {:.10f}
+External term [mJ/m^2]                  = {:.10f}
+Unbalanced term [mJ/m^2]                = {:.10f}
+Excess term [mJ/m^2]                    = {:.10f}
+Combined small length scale [mJ/m^2]    = {:.10f}
 
-Without unbalancing potential [mJ/m^2]  = {:.6f}
-Solvation free energy per area [mJ/m^2] = {:.6f}
+Without unbalancing potential [mJ/m^2]  = {:.10f}
+Solvation free energy per area [mJ/m^2] = {:.10f}
 
 -----------------------------------END OF OUTPUT------------------------------'''.format( \
         rho_bulk, temperature, \
-        liquid_coex, vapor_coex, SG_c/c_convert, SG_m/m_convert, \
+        liquid_coex, vapor_coex, SG_c/c_convert, SG_d/d_convert, \
+        SG_m_min/m_convert, SG_m_max/m_convert, SG_m/m_convert, \
         a/a_convert, cg_length, external_potential_text, \
         F_local, F_gradient, F_u_large, F_large, \
         F_id, F_ext, F_u_small, F_exc, F_small, \
@@ -544,7 +565,7 @@ if __name__ == "__main__":
     
     # essenial inputs
     rho_bulk, temperature, delta_mu, liquid_coex, vapor_coex, \
-    SG_c, SG_d, SG_m, cg_length, a, dcf_file, \
+    SG_c, SG_d, SG_m_min, SG_m_max, SG_rho_s_min, SG_rho_s_max, cg_length, a, dcf_file, \
     initial_guess, alpha_full, alpha_slow, rtol, atol, \
     k_cutoff, dr, z_min, z_max, max_FT, wall_type, \
     HW_plane, LJ_sigma, LJ_epsilon, ATT_epsilon, ATT_sigma, ATT_radius \
@@ -558,7 +579,8 @@ if __name__ == "__main__":
     beta = 1/(kB * temperature)
     delta_mu = delta_mu * kB * temperature
     SG_c = SG_c * c_convert
-    SG_m = SG_m * m_convert
+    SG_m_min = SG_m_min * m_convert
+    SG_m_max = SG_m_max * m_convert
     SG_d = SG_d * d_convert
     a = a * a_convert
    
@@ -583,7 +605,7 @@ if __name__ == "__main__":
     # FIRST ITERATION INITIALISATION
     if initial_guess != 'bulk':
         distance = float(initial_guess)
-        d = 0.5 * np.sqrt(SG_m/SG_c) / (liquid_coex-vapor_coex)
+        d = 0.5 * np.sqrt(SG_m_min/SG_c) / (liquid_coex-vapor_coex)
         rho_guess = 0.5*((rho_bulk + vapor_coex)+(rho_bulk - vapor_coex) \
                          *np.tanh((z_ -edge+distance)/d))
     else:
@@ -598,7 +620,7 @@ if __name__ == "__main__":
     full_dens_new   = update_full_dens(slow_dens_guess, full_dens_guess, 1)
     slow_dens_guess_z = rho_guess
         
-    slow_dens_new   = update_slow_dens(full_dens_new, slow_dens_guess_z)
+    slow_dens_new, SG_m_new  = update_slow_dens(full_dens_new, slow_dens_guess_z)
     slow_dens_trial = slow_dens_new
     slow_dens_old   = 0*slow_dens_trial
     
@@ -610,15 +632,16 @@ if __name__ == "__main__":
         # Iterative loop: update full density if not converged
         full_dens_new = update_full_dens(slow_dens_old, full_dens_new, 1)
         # Iterative loop: update slow density if not converged
-        slow_dens_new = update_slow_dens(full_dens_new, slow_dens_new)
+        slow_dens_new, SG_m_new = update_slow_dens(full_dens_new, slow_dens_new)
         slow_dens_trial = slow_dens_new
     
     # final converged densities
     slow_dens_final = slow_dens_new
+    SG_m_final = SG_m_new
     full_dens_final = full_dens_new
     
     # write output
-    write_out_data(path_to_output, full_dens_final, slow_dens_final)
+    write_out_data(path_to_output, full_dens_final, slow_dens_final, SG_m_final)
     
 
     

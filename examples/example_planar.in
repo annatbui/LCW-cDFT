@@ -1,30 +1,30 @@
 # FLUID PROPERTIES
 
-model                       = mW
-bulk_density [AA-3]         = 0.032203
-dcf_zspace [file_path]	    = /scratch/btb32/cdft-solvation/theory/LCW-cDFT/parameters/dcf_cz_mW_T426.txt
-temperature [K]             = 426
+model                       = SPC/E
+bulk_density [AA-3]         = 0.033234
+dcf_zspace [file_path]      = /scratch/btb32/cdft-solvation/theory/LCW-cDFT/parameters/dcf_cz_SPCE_T300.txt
+temperature [K]             = 300
 chemical_potential [kBT]    = 0
 
 # SQUARE GRADIENT
 
-c [J mol-1 nm9]		    = 2.2959232811098986
-m [kJ mol-2 cm3 AA2]        = 900
-liquid_coex_density [AA-3]  = 0.032203
-vapor_coex_density [AA-3]   = 1.652e-6
+c [J mol-1 nm9]             = 1.0960448110049574
+m [kJ mol-2 cm3 AA2]        = 4083
+liquid_coex_density [AA-3]  = 0.033234
+vapor_coex_density [AA-3]   = 4.747e-7
 
 # EXTERNAL POTENTIAL
 
-wall_type                  = HW
-HW_plane [AA]              = 5.0
+wall_type                   = HW
+HW_plane [AA]               = 0
 
 # COARSE-GRAINING PARAMETERS
 
-a [kJ cm3 mol-2]            = 280
-lambda [angstrom]           = 1.1
+a [kJ cm3 mol-2]            = 600
+lambda [angstrom]           = 1.5
 
 # OPTIONAL SETTINGS
 
 alpha_full                  = 0.05 
 alpha_slow                  = 0.15
-initial_guess               = -2
+initial_guess               = -6

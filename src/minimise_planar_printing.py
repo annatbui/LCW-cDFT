@@ -128,8 +128,8 @@ def load_input(filename):
     initial_guess       = 'bulk'
     alpha_full          = 0.05
     alpha_slow          = 0.15
-    rtol                = 1e-4
-    atol                = 1e-5 
+    rtol                = 5e-5
+    atol                = 5e-6 
     k_cutoff            = 2000
     max_FT              = 25
     z_max               = 30
@@ -297,7 +297,7 @@ def update_full_dens(rho_slow, rho_guess, ratio):
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
     ax.set_ylim(-0.05,3.05)
-    ax.set_xlim(-10,30)
+    ax.set_xlim(-20,40)
     ax.fill_between(z_[z_< edge], -1, 4, color='gray', alpha=0.4)
     ax.set_ylabel(r'$\rho(z)/\rho_{\mathrm{u}}$')
     ax.set_xlabel(r'$z$ [$\mathrm{\AA}$]')
@@ -342,7 +342,7 @@ def update_slow_dens(rho_full, rho_guess):
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
     ax.set_ylim(-0.05,3.05)
-    ax.set_xlim(-10,30)
+    ax.set_xlim(-20,40)
     ax.fill_between(z_[z_< edge], -1, 4, color='gray', alpha=0.4)
     ax.set_ylabel(r'$\rho_{\mathrm{s}}(z)/\rho_{\mathrm{u}}$')
     ax.set_xlabel(r'$z$ [$\mathrm{\AA}$]')
