@@ -1,32 +1,31 @@
 # FLUID PROPERTIES
 
 model                       = SPC/E
-bulk_density [AA-3]         = 0.03323521
-dcf_kspace [file_path]	    = ../parameters/dcf_ck_SPCE_T300.txt
+bulk_density [AA-3]         = 0.033234
+dcf_zspace [file_path]      = ../parameters/dcf_cz_SPCE_T300.txt
 temperature [K]             = 300
-chemical_potential [kBT]    = 1e-3
+chemical_potential [kBT]    = 0
 
-# COEXISTENCE PROPERTIES
+# SQUARE GRADIENT
 
-surface_tension [mJ m-2]    = 63.6
+c [J mol-1 nm9]             = 1.079353137008764
+d [J mol-1 nm15]            = 30
+m [kJ mol-2 cm3 AA2]        = 1255
 liquid_coex_density [AA-3]  = 0.033234
 vapor_coex_density [AA-3]   = 4.747e-7
-interfacial_thickness [AA]  = 1.54
 
 # EXTERNAL POTENTIAL
 
-solute_type                 = HS
-HS_radius [AA]              = 2
-#LJ_epsilon [kcal mol-1]     = 0 
-#LJ_sigma  [AA]              = 0
+wall_type                  = HW
+HW_plane [AA]              = 0
 
 # COARSE-GRAINING PARAMETERS
 
 a [kJ cm3 mol-2]            = 200
-lambda [angstrom]           = 0.85
+lambda [angstrom]           = 0.8
 
 # OPTIONAL SETTINGS
 
-alpha_full                  = 0.05 
+alpha_full                  = 0.05
 alpha_slow                  = 0.15
-initial_guess               = bulk
+initial_guess               = 0

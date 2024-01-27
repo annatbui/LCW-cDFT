@@ -341,6 +341,7 @@ def update_full_dens(rho_slow, rho_guess, ratio):
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
     ax.set_ylim(-0.05,3.05)
+    ax.set_xlim(-1,31)
     ax.set_ylabel(r'$\rho(z)/\rho_{\mathrm{u}}$')
     ax.set_xlabel(r'$z$ [$\mathrm{\AA}$]')
     place(ax)
@@ -394,6 +395,7 @@ def update_slow_dens(rho_full, rho_guess):
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
     ax.set_ylim(-0.05,3.05)
+    ax.set_xlim(-1,31)
     ax.set_ylabel(r'$\rho_{\mathrm{s}}(z)/\rho_{\mathrm{u}}$')
     ax.set_xlabel(r'$z$ [$\mathrm{\AA}$]')
 
