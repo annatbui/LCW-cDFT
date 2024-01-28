@@ -524,19 +524,19 @@ EXTERNAL POTENTIAL
 FREE ENERGY OF SOLVATION    
 -------------------------------------------------------------------------------
 
-Local van der Waals [mJ/m^2]            = {:.6f}
-Gradient van der Waals [mJ/m^2]         = {:.6f}
-Unbalanced energy [mJ/m^2]              = {:.6f}
-Combined large length scale [mJ/m^2]    = {:.6f}
+Local van der Waals [mJ/m^2]            = {:.10f}
+Gradient van der Waals [mJ/m^2]         = {:.10f}
+Unbalanced energy [mJ/m^2]              = {:.10f}
+Combined large length scale [mJ/m^2]    = {:.10f}
 
-Ideal term [mJ/m^2]                     = {:.6f}
-External term [mJ/m^2]                  = {:.6f}
-Unbalanced term [mJ/m^2]                = {:.6f}
-Excess term [mJ/m^2]                    = {:.6f}
-Combined small length scale [mJ/m^2]    = {:.6f}
+Ideal term [mJ/m^2]                     = {:.10f}
+External term [mJ/m^2]                  = {:.10f}
+Unbalanced term [mJ/m^2]                = {:.10f}
+Excess term [mJ/m^2]                    = {:.10f}
+Combined small length scale [mJ/m^2]    = {:.10f}
 
-Without unbalancing potential [mJ/m^2]  = {:.6f}
-Solvation free energy per area [mJ/m^2] = {:.6f}
+Without unbalancing potential [mJ/m^2]  = {:.10f}
+Solvation free energy per area [mJ/m^2] = {:.10f}
 
 -----------------------------------END OF OUTPUT------------------------------'''.format( \
         rho_bulk, temperature, \
