@@ -451,7 +451,7 @@ Copyright (C) 2023 Anna T. Bui
 
 Paper: A classical density functional theory for solvation across length scales
     Authors: Anna T. Bui, Stephen J. Cox
-    Available at: *** ADD URL ***
+    Available at: https://doi.org/10.1063/5.0223750
 
 -------------------------------------------------------------------------------
 
