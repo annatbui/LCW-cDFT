@@ -10,7 +10,10 @@ This is a simple python program implementing Lum-Chandler-Weeks-style classical 
 
 Please find the associated paper with the code:
 
-***A. T. Bui, S. J. Cox, "A classical density functional theory for solvation across length scales", 2023***
+***A. T. Bui, S. J. Cox, "A classical density functional theory for solvation across length scales", J. Chem. Phys. 161, 104103 (2024)***
+
+DOI: https://doi.org/10.1063/5.0223750
+
 
 ## Installation
 
