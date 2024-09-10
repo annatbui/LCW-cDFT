@@ -21,7 +21,7 @@
     
 -------------------------------------------------------------------------------
 
-    Created October 2022. Last updated November 2023.
+    Created October 2022. Last updated Sep 2024.
     Author: Anna T. Bui
     Email: btb32@cam.ac.uk
 
@@ -31,7 +31,7 @@
 
     Paper: A classical density functional theory for solvation across length scales
         Authors: Anna T. Bui, Stephen J. Cox
-        Available at: *** ADD URL ***
+        Available at: https://doi.org/10.1063/5.0223750
 
     Supported fluids and state points:
         SPC/E water, 300 K
@@ -474,7 +474,7 @@ Copyright (C) 2023 Anna T. Bui
 
 Paper: A classical density functional theory for solvation across length scales
     Authors: Anna T. Bui, Stephen J. Cox
-    Available at: *** ADD URL ***
+    Available at: https://doi.org/10.1063/5.0223750
 
 -------------------------------------------------------------------------------
 
